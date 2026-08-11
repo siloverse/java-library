@@ -1,0 +1,10 @@
+# Project exclude paths
+/.ai/
+/.claude/
+/.gradle/
+/.idea/
+/.kotlin/
+**/build/
+/gradle/wrapper/gradle-wrapper.jar
+/gradlew.bat
+/gradlew
