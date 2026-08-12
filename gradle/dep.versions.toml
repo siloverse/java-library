@@ -1,0 +1,15 @@
+[versions]
+siloverse-build = "1.6.0"
+
+[libraries]
+slf4j-api = { module = "org.slf4j:slf4j-api" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple" }
+spring-aop = { module = "org.springframework:spring-aop" }
+spring-beans = { module = "org.springframework:spring-beans" }
+spring-context = { module = "org.springframework:spring-context" }
+spring-tx = { module = "org.springframework:spring-tx" }
+assertj-core = { module = "org.assertj:assertj-core" }
+jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
+
+[plugins]
+siloverse-jvm-library = { id = "io.github.siloverse.jvm-library", version.ref = "siloverse-build" }
