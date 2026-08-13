@@ -7,8 +7,10 @@ slf4j-simple = { module = "org.slf4j:slf4j-simple" }
 spring-aop = { module = "org.springframework:spring-aop" }
 spring-beans = { module = "org.springframework:spring-beans" }
 spring-context = { module = "org.springframework:spring-context" }
+spring-jdbc = { module = "org.springframework:spring-jdbc" }
 spring-tx = { module = "org.springframework:spring-tx" }
 assertj-core = { module = "org.assertj:assertj-core" }
+postgresql = { module = "org.postgresql:postgresql" }
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
 
 [plugins]
