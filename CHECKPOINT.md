@@ -50,22 +50,21 @@ Relay mapping: `basicPublish(exchangeFor(message_type), message_type, propsFrom(
 
 **RabbitMQ model (lesson locked):** publishers target EXCHANGES, never queues. Queue-per-consumer-id `<microservice>-<consumer-id>`, declared + bound by the CONSUMING side at startup from its frozen registry. Relay publishes once; broker fans out. Relay is kind-agnostic — event/command difference lives in topology declaration at boot, not in the publish path.
 
-## ⛔ OPEN GATE — first item tomorrow
+## ✅ Gate closed — crash story answered (2026-08-13)
 
-**The crash story (question c, part 2) — asked 4×, unanswered. No `TransactionAwareAsyncBus` code until answered** (the answer is the delivery contract the javadoc must promise). Scaffold:
+Unstamped row after relay restart is ambiguous (never-published vs published-but-unstamped look identical; relay can't ask the broker). Relay REPUBLISHES — duplicate beats loss. Consumer sees byte-identical duplicates, same `message_id` = dedup key.
 
-1. Relay reads row, `basicPublish`, broker accepts.
-2. Relay dies before `UPDATE ... SET published_at = now()` commits.
-3. Relay restarts, runs `SELECT ... WHERE published_at IS NULL ORDER BY id`.
-4. What does it see, and what does it do?
-5. What does the consumer experience?
-6. So: what delivery guarantee does the bus offer, and what must every consumer survive?
+**`TransactionAwareAsyncBus` contract (javadoc must promise):** committed tx ⇒ delivered **at least once**; duplicates possible; consumers must be idempotent; rolled-back tx delivers nothing (outbox row rolls back with business data). Exactly-once delivery = myth without 2PC; real thing is at-least-once + idempotent consumption.
+
+**`AsynchronousBus` rationale (decided):** direct-to-broker, NO outbox/relay/DB in path. Exists for (1) stateless publishers (no tx to join — outbox structurally unusable), (2) self-healing messages (cache hints, telemetry, heartbeats) not worth the outbox premium. Litmus: message asserts a DB-committed fact → tx-aware bus; otherwise → async bus. Contract: **at-most-once** wrt crashes (may await broker ack, throw on nack; crash before ack = silent loss). Ghost-message trap: publish inside a rolled-back tx announces a state that never happened — javadoc warns.
+
+**Ghost-trap enforcement (decided):** NO runtime tx detection — trap is semantic (message meaning), not mechanical (tx active), so a runtime guard false-positives on legit uses (e.g. metrics inside `@Transactional`) and would drag spring-tx into the publish path. Enforcement = javadoc + code review; static-analysis suggestion parked.
 
 ## Then / next
 
-`TransactionAwareAsyncBus` impl (always-outbox, joins caller's tx) → relay → RabbitMQ adapter (topology from frozen registry at startup). Envelope/`@MessageName`/metadata designs exist in conversation history — not yet coded.
+`AsynchronousBus` impl (direct-to-broker) · `TransactionAwareAsyncBus` impl (always-outbox, joins caller's tx) → relay → RabbitMQ adapter (topology from frozen registry at startup). Envelope/`@MessageName`/metadata designs exist in conversation history — not yet coded.
 
-**Parked:** after-commit dispatch · `MessageContext` (param index reserved) · `Request` revival · NATS adapter #3 · batch consumers · inbox/idempotency (now motivated: at-least-once ⇒ dedup by `message_id`).
+**Parked:** after-commit dispatch · `MessageContext` (param index reserved) · `Request` revival · NATS adapter #3 · batch consumers · inbox/idempotency (now motivated: at-least-once ⇒ dedup by `message_id`) · static-analysis warning for `AsynchronousBus` inside `@Transactional` scope.
 
 ## Working style
 
