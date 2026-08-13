@@ -6,7 +6,7 @@ import io.github.siloverse.messaging.core.fixtures.FakePayloadSerializer;
 import io.github.siloverse.messaging.core.fixtures.OrderConfirmed;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
-import io.github.siloverse.messaging.core.transport.MessageTransport;
+import io.github.siloverse.messaging.core.transport.OutboxWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,12 +16,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
-class DefaultAsynchronousBusTest {
+class DefaultTransactionAwareAsynchronousBusTest {
 
     MessageNameRegistry registry;
     FakePayloadSerializer serializer;
-    RecordingTransport transport;
-    DefaultAsynchronousBus bus;
+    RecordingOutbox outbox;
+    DefaultTransactionAwareAsynchronousBus bus;
 
     @BeforeEach
     void setup() {
@@ -30,18 +30,18 @@ class DefaultAsynchronousBusTest {
                 .register(ConfirmOrder.class, "order-silo.confirm-order")
                 .freeze();
         serializer = new FakePayloadSerializer();
-        transport = new RecordingTransport();
-        bus = new DefaultAsynchronousBus(registry, transport, serializer);
+        outbox = new RecordingOutbox();
+        bus = new DefaultTransactionAwareAsynchronousBus(registry, outbox, serializer);
     }
 
     @Test
-    void testPublishBuildsEnvelopeFromRegistryAndSerializer() {
+    void testPublishAppendsEnvelopeToOutbox() {
         var event = new OrderConfirmed("42");
 
         bus.publish(event);
 
-        assertThat(transport.sent).hasSize(1);
-        Envelope envelope = transport.sent.getFirst();
+        assertThat(outbox.appended).hasSize(1);
+        Envelope envelope = outbox.appended.getFirst();
         assertThat(envelope.messageType()).isEqualTo("order-silo.order-confirmed");
         assertThat(envelope.payload()).isEqualTo(event.toString().getBytes(StandardCharsets.UTF_8));
         assertThat(envelope.headers()).containsEntry("content-type", "test/fake");
@@ -49,13 +49,13 @@ class DefaultAsynchronousBusTest {
     }
 
     @Test
-    void testSendBuildsEnvelopeFromRegistryAndSerializer() {
+    void testSendAppendsEnvelopeToOutbox() {
         var command = new ConfirmOrder("42");
 
         bus.send(command);
 
-        assertThat(transport.sent).hasSize(1);
-        Envelope envelope = transport.sent.getFirst();
+        assertThat(outbox.appended).hasSize(1);
+        Envelope envelope = outbox.appended.getFirst();
         assertThat(envelope.messageType()).isEqualTo("order-silo.confirm-order");
         assertThat(envelope.payload()).isEqualTo(command.toString().getBytes(StandardCharsets.UTF_8));
         assertThat(envelope.headers()).containsEntry("content-type", "test/fake");
@@ -63,16 +63,16 @@ class DefaultAsynchronousBusTest {
     }
 
     @Test
-    void testUnregisteredMessageThrowsAndSendsNothing() {
-        var unregisteredOnlyBus = new DefaultAsynchronousBus(
-                MessageNameRegistry.builder().freeze(), transport, serializer);
+    void testUnregisteredMessageThrowsAndAppendsNothing() {
+        var emptyRegistryBus = new DefaultTransactionAwareAsynchronousBus(
+                MessageNameRegistry.builder().freeze(), outbox, serializer);
 
-        assertThatThrownBy(() -> unregisteredOnlyBus.publish(new OrderConfirmed("42")))
+        assertThatThrownBy(() -> emptyRegistryBus.publish(new OrderConfirmed("42")))
                 .isInstanceOf(MessagingConfigurationException.class)
                 .hasMessageContaining(OrderConfirmed.class.getName());
 
-        // failing must not leak a half-built message to the wire
-        assertThat(transport.sent).isEmpty();
+        // failing must not leave a half-built row for the relay to find
+        assertThat(outbox.appended).isEmpty();
     }
 
     @Test
@@ -80,28 +80,28 @@ class DefaultAsynchronousBusTest {
         bus.publish(new OrderConfirmed("42"));
         bus.publish(new OrderConfirmed("42"));
 
-        assertThat(transport.sent).hasSize(2);
-        assertThat(transport.sent.getFirst().messageId())
-                .isNotEqualTo(transport.sent.getLast().messageId());
+        assertThat(outbox.appended).hasSize(2);
+        assertThat(outbox.appended.getFirst().messageId())
+                .isNotEqualTo(outbox.appended.getLast().messageId());
     }
 
     @Test
     void testConstructorRejectsNullDependencies() {
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(null, transport, serializer))
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(null, outbox, serializer))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(registry, null, serializer))
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(registry, null, serializer))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(registry, transport, null))
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(registry, outbox, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
-    static class RecordingTransport implements MessageTransport {
+    static class RecordingOutbox implements OutboxWriter {
 
-        final List<Envelope> sent = new ArrayList<>();
+        final List<Envelope> appended = new ArrayList<>();
 
         @Override
-        public void send(Envelope envelope) {
-            sent.add(envelope);
+        public void append(Envelope envelope) {
+            appended.add(envelope);
         }
     }
 }
