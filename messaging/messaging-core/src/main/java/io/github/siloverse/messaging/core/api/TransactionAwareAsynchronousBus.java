@@ -1,6 +1,6 @@
 package io.github.siloverse.messaging.core.api;
 
-public interface TransactionAwareAsyncBus {
+public interface TransactionAwareAsynchronousBus {
     void publish(Event event);
     void send(Command command);
 }

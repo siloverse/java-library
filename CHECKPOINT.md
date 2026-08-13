@@ -13,7 +13,7 @@ _Last updated: 2026-08-13. This document is the arbiter: if Claude asserts somet
 ## Locked decisions (do not reopen)
 
 - Two unrelated markers: `Event` (0..many, pub-sub), `Command` (exactly 1, fire-forget). NO shared Message supertype. `Request<R>` designed then removed (YAGNI; blueprint in git history).
-- Bus names: `SynchronousBus`, `AsynchronousBus`, `TransactionAwareAsyncBus`. No common supertype — guarantee visible at injection point.
+- Bus names: `SynchronousBus`, `AsynchronousBus`, `TransactionAwareAsynchronousBus`. No common supertype — guarantee visible at injection point.
 - `SynchronousBus` = participant bus: same thread, same transaction, registration order, first failure rolls back everything. Zero event consumers = legal; zero command consumers = `NoHandlerException`. Participant→sync, observer→async.
 - `@Consumer(id=...)` — id REQUIRED, never derived (queue name + consumer group + inbox dedup key).
 - Fail-fast tiers: construction=NPE/IAE · registration/startup=`MessagingConfigurationException` · dispatch=`NoHandlerException`. Errors name culprit AND fix; one culprit per error (chained errors OK, e.g. lazy→then→parent-class).
@@ -36,7 +36,7 @@ _Last updated: 2026-08-13. This document is the arbiter: if Claude asserts somet
 |---|---|---|
 | `id` | bigserial | relay polling order (NOT created_at — ties) |
 | `message_id` | uuid | wire identity; travels in headers; consumer inbox dedup key later |
-| `message_type` | varchar | routing — picks the exchange (future `@MessageName` wire name, not class name) |
+| `message_type` | varchar | routing — picks the exchange (from `MessageNameRegistry`, never the class name) |
 | `payload` | bytea | sealed bytes; relay NEVER deserializes |
 | `headers` | jsonb | wire metadata: content-type, schema version, trace context |
 | `created_at` | timestamptz | diagnostics only |
@@ -54,15 +54,17 @@ Relay mapping: `basicPublish(exchangeFor(message_type), message_type, propsFrom(
 
 Unstamped row after relay restart is ambiguous (never-published vs published-but-unstamped look identical; relay can't ask the broker). Relay REPUBLISHES — duplicate beats loss. Consumer sees byte-identical duplicates, same `message_id` = dedup key.
 
-**`TransactionAwareAsyncBus` contract (javadoc must promise):** committed tx ⇒ delivered **at least once**; duplicates possible; consumers must be idempotent; rolled-back tx delivers nothing (outbox row rolls back with business data). Exactly-once delivery = myth without 2PC; real thing is at-least-once + idempotent consumption.
+**`TransactionAwareAsynchronousBus` contract (javadoc must promise):** committed tx ⇒ delivered **at least once**; duplicates possible; consumers must be idempotent; rolled-back tx delivers nothing (outbox row rolls back with business data). Exactly-once delivery = myth without 2PC; real thing is at-least-once + idempotent consumption.
 
 **`AsynchronousBus` rationale (decided):** direct-to-broker, NO outbox/relay/DB in path. Exists for (1) stateless publishers (no tx to join — outbox structurally unusable), (2) self-healing messages (cache hints, telemetry, heartbeats) not worth the outbox premium. Litmus: message asserts a DB-committed fact → tx-aware bus; otherwise → async bus. Contract: **at-most-once** wrt crashes (may await broker ack, throw on nack; crash before ack = silent loss). Ghost-message trap: publish inside a rolled-back tx announces a state that never happened — javadoc warns.
+
+**Message naming — LOCKED, do not reopen (litigated 5×, 2026-08-13):** wire name comes from a `MessageNameRegistry` (core class: builder, `register(Class, String)`, `freeze()`, `nameOf(Class)`). Each service ships a static registry INSIDE its messages/contract jar (e.g. `OrderSiloMessages.names()`) so publisher and consumers read the same map — classes and names travel together. Name convention: `<service>.<message>` lowercase-dashed (e.g. `order-silo.order-created`) — a style rule for humans, never computed. REJECTED: `@MessageName` annotation (user preference; delete the typed file), class-name derivation (dash illegal in packages, rename = silent loss — failed twice in user's own examples), instance-level MessageProvider naming (no instance exists at startup binding time). Wire identity must be static per type, resolvable from `Class` alone. Failures: unregistered class → `MessagingConfigurationException` at first publish (publisher) / at startup binding (consumer); blank name or duplicate class → builder throws. Service module layout agreed: `silo` (app) / `messages` (contract jar) / `web` (DTOs); dashes legal in Maven coordinates, not in Java packages. "MessageProvider" = app-side factory building message objects — user's own code, no library involvement; bus signature stays `publish(Event)`/`send(Command)`.
 
 **Ghost-trap enforcement (decided):** NO runtime tx detection — trap is semantic (message meaning), not mechanical (tx active), so a runtime guard false-positives on legit uses (e.g. metrics inside `@Transactional`) and would drag spring-tx into the publish path. Enforcement = javadoc + code review; static-analysis suggestion parked.
 
 ## Then / next
 
-`AsynchronousBus` impl (direct-to-broker) · `TransactionAwareAsyncBus` impl (always-outbox, joins caller's tx) → relay → RabbitMQ adapter (topology from frozen registry at startup). Envelope/`@MessageName`/metadata designs exist in conversation history — not yet coded.
+Publish-path pieces in core, red-test-first: `MessageNameRegistry` → `Envelope(messageId, messageType, headers, payload)` → ports `PayloadSerializer` + `MessageTransport` → `DefaultAsynchronousBus` (mints UUID in publish, resolves name, serializes, hands envelope to transport). Then `TransactionAwareAsynchronousBus` impl (always-outbox, joins caller's tx) → relay → RabbitMQ adapter (topology from frozen registries at startup). NEXT DELIVERABLE: user types `MessageNameRegistryTest` (register-and-lookup · unregistered throws · blank name throws · duplicate class throws) and must state predicted failure BEFORE running.
 
 **Parked:** after-commit dispatch · `MessageContext` (param index reserved) · `Request` revival · NATS adapter #3 · batch consumers · inbox/idempotency (now motivated: at-least-once ⇒ dedup by `message_id`) · static-analysis warning for `AsynchronousBus` inside `@Transactional` scope.
 
