@@ -46,4 +46,5 @@ dependencyResolutionManagement {
 rootProject.name = "java-library"
 
 include("messaging:messaging-core")
+include("messaging:messaging-rabbitmq")
 include("messaging:messaging-spring")

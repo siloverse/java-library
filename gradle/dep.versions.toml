@@ -1,7 +1,10 @@
 [versions]
-siloverse-build = "1.6.0"
+siloverse-build = "1.7.0"
 
 [libraries]
+# Version managed by spring-boot-dependencies via the shared platform. Deliberately NOT in the
+# shared catalog: services must reach the broker through the buses, never the client directly.
+amqp-client = { module = "com.rabbitmq:amqp-client" }
 slf4j-api = { module = "org.slf4j:slf4j-api" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple" }
 spring-aop = { module = "org.springframework:spring-aop" }
