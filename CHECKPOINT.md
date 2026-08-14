@@ -8,7 +8,7 @@ _Last updated: 2026-08-15. This document is the arbiter: if Claude asserts somet
 
 **Base package:** `io.github.siloverse.messaging`
 
-**Git state:** `main` = squash-merged `8e27571 Add SynchronousBus` (whole sync chapter, one commit). Current branch: `add-aynschronous-bus` (fresh off main). Working tree clean.
+**Git state:** `main` = async chapter merged via PR #2 (rebase-merge, individual commits, head `19f5fcf`; sync chapter before it as squash `8e27571 Add SynchronousBus`). Current branch: `add-message-listener` (fresh off main). Working tree clean apart from this line.
 
 ## Locked decisions (do not reopen)
 
