@@ -2,6 +2,7 @@ package io.github.siloverse.messaging.core.naming;
 
 import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,12 @@ public final class MessageNameRegistry {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public static MessageNameRegistry compose(MessageNameRegistry... messageNameRegistries) {
+        var builder = MessageNameRegistry.builder();
+        Arrays.stream(messageNameRegistries).forEach(r -> r.names.forEach(builder::register));
+        return builder.freeze();
     }
 
     public String nameOf(Class<?> messageClass) {

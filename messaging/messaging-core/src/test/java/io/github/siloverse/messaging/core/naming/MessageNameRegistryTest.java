@@ -65,6 +65,55 @@ class MessageNameRegistryTest {
     }
 
     @Test
+    void testComposeMergesContractJarRegistries() {
+        var orderSilo = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .freeze();
+        var billingSilo = MessageNameRegistry.builder()
+                .register(ConfirmOrder.class, "billing-silo.confirm-order")
+                .freeze();
+
+        var composed = MessageNameRegistry.compose(orderSilo, billingSilo);
+
+        assertThat(composed.nameOf(OrderConfirmed.class)).isEqualTo("order-silo.order-confirmed");
+        assertThat(composed.nameOf(ConfirmOrder.class)).isEqualTo("billing-silo.confirm-order");
+        assertThat(composed.allNames())
+                .containsExactlyInAnyOrder("order-silo.order-confirmed", "billing-silo.confirm-order");
+    }
+
+    @Test
+    void testComposeRejectsDuplicateWireNameAcrossJars() {
+        // two teams claiming the same wire name must die at startup, not cross-wire messages
+        var one = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .freeze();
+        var two = MessageNameRegistry.builder()
+                .register(ConfirmOrder.class, "order-silo.order-confirmed")
+                .freeze();
+
+        assertThatThrownBy(() -> MessageNameRegistry.compose(one, two))
+                .isInstanceOf(MessagingConfigurationException.class)
+                .hasMessageContaining("order-silo.order-confirmed")
+                .hasMessageContaining(OrderConfirmed.class.getName())
+                .hasMessageContaining(ConfirmOrder.class.getName());
+    }
+
+    @Test
+    void testComposeRejectsTheSameClassArrivingTwice() {
+        // the doubled-contract-jar scenario: one class must come from exactly one registry
+        var one = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .freeze();
+        var again = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .freeze();
+
+        assertThatThrownBy(() -> MessageNameRegistry.compose(one, again))
+                .isInstanceOf(MessagingConfigurationException.class)
+                .hasMessageContaining(OrderConfirmed.class.getName());
+    }
+
+    @Test
     void testAllNamesEnumeratesEveryRegisteredWireName() {
         var registry = MessageNameRegistry.builder()
                 .register(OrderConfirmed.class, "order-silo.order-confirmed")
