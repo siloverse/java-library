@@ -63,4 +63,16 @@ class MessageNameRegistryTest {
                 .hasMessageContaining(OrderConfirmed.class.getName())
                 .hasMessageContaining("already registered");
     }
+
+    @Test
+    void testAllNamesEnumeratesEveryRegisteredWireName() {
+        var registry = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .register(ConfirmOrder.class, "order-silo.confirm-order")
+                .freeze();
+
+        // topology source: broker adapters declare one exchange per wire name
+        assertThat(registry.allNames())
+                .containsExactlyInAnyOrder("order-silo.order-confirmed", "order-silo.confirm-order");
+    }
 }

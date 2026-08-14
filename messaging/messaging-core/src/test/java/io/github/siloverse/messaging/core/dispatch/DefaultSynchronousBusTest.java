@@ -38,7 +38,7 @@ class DefaultSynchronousBusTest {
     void publishInvokesBothConsumersInOrder() throws Exception {
         registry.register(def("a", OrderConfirmed.class, "consumeA"));
         registry.register(def("b", OrderConfirmed.class, "consumeB"));
-
+        registry.freeze();
         var event = new OrderConfirmed(UUID.randomUUID().toString());
         bus.publish(event);
 
@@ -47,8 +47,8 @@ class DefaultSynchronousBusTest {
 
     @Test
     void publishWithNoConsumersDoesNothing() {
+        registry.freeze();
         var event = new OrderConfirmed(UUID.randomUUID().toString());
-
         assertThatCode(() -> bus.publish(event)).doesNotThrowAnyException();
         assertThat(handlers.received).isEmpty();
     }
@@ -56,6 +56,7 @@ class DefaultSynchronousBusTest {
     @Test
     void sendInvokesConsumerWithSameCommandInstance() throws Exception {
         registry.register(def("handler", ConfirmOrder.class, "handle"));
+        registry.freeze();
         var command = new ConfirmOrder(UUID.randomUUID().toString());
 
         bus.send(command);
@@ -66,6 +67,7 @@ class DefaultSynchronousBusTest {
     @Test
     void publishRethrowsRuntimeExceptionFromConsumer() throws Exception {
         registry.register(def("failing", OrderConfirmed.class, "failing"));
+        registry.freeze();
         var event = new OrderConfirmed(UUID.randomUUID().toString());
 
         assertThatThrownBy(() -> bus.publish(event))
@@ -76,6 +78,7 @@ class DefaultSynchronousBusTest {
     @Test
     void publishWrapsCheckedExceptionFromConsumer() throws Exception {
         registry.register(def("failing-checked", OrderConfirmed.class, "failingChecked"));
+        registry.freeze();
         var event = new OrderConfirmed(UUID.randomUUID().toString());
 
         assertThatThrownBy(() -> bus.publish(event))
