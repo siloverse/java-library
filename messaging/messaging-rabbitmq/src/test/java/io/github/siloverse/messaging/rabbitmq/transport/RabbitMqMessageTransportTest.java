@@ -24,6 +24,7 @@ class RabbitMqMessageTransportTest {
     static ConnectionFactory factory;
     static Connection connection;
 
+
     @BeforeAll
     static void startBrokerAndConnect() throws Exception {
         rabbit.start();

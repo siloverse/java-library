@@ -4,4 +4,8 @@ public class MessagingConfigurationException extends MessagingException {
     public MessagingConfigurationException(String message) {
         super(message);
     }
+
+    public MessagingConfigurationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
