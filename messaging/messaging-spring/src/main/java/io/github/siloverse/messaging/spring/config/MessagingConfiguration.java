@@ -10,6 +10,11 @@ import io.github.siloverse.messaging.spring.consumer.SpringConsumerScanner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * The synchronous chapter: consumer scanning, the registry lifecycle and the synchronous
+ * bus. Sufficient on its own for a sync-only application; register
+ * {@link AsyncMessagingConfiguration} additionally for the outbox/broker machinery.
+ */
 @Configuration
 public class MessagingConfiguration {
 
