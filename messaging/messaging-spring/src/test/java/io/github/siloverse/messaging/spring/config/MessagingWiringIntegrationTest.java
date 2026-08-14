@@ -13,7 +13,7 @@ import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnector;
 import io.github.siloverse.messaging.rabbitmq.topology.RabbitMqTopologyDeclarer;
 import io.github.siloverse.messaging.rabbitmq.transport.RabbitMqMessageTransport;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelaySettings;
-import io.github.siloverse.messaging.spring.outbox.TopologyDeclaration;
+import io.github.siloverse.messaging.spring.topology.TopologyDeclaration;
 import io.github.siloverse.messaging.spring.serialization.JacksonPayloadSerializer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,8 +38,8 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * The whole async pipeline, wired by Spring, against real infrastructure:
- * committed transaction -> outbox row -> relay -> broker -> consumer queue.
+ * The whole async pipeline, wired by Spring, against real infrastructure: committed transaction -> outbox row -> relay
+ * -> broker -> consumer queue.
  */
 class MessagingWiringIntegrationTest {
 
@@ -54,7 +54,7 @@ class MessagingWiringIntegrationTest {
         rabbit.start();
 
         context = new AnnotationConfigApplicationContext();
-        context.register(MessagingConfiguration.class, BillingSiloApp.class);
+        context.register(MessagingConfiguration.class, AsyncMessagingConfiguration.class, BillingSiloApp.class);
         context.refresh();
     }
 
@@ -79,15 +79,43 @@ class MessagingWiringIntegrationTest {
 
         assertThat(new String(delivered.getBody(), StandardCharsets.UTF_8)).contains("42");
         assertThat(delivered.getProps().getMessageId()).isNotBlank();
-        assertThat(delivered.getProps().getDeliveryMode())
-                .as("the pipeline must preserve persistence end to end")
+        assertThat(delivered.getProps().getDeliveryMode()).as("the pipeline must preserve persistence end to end")
                 .isEqualTo(2);
 
         // the relay's half of the proof: the shipped row is stamped as published
         var jdbcTemplate = context.getBean(JdbcTemplate.class);
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM messaging_outbox WHERE published_at IS NOT NULL", Long.class))
-                .isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM messaging_outbox WHERE published_at IS NOT NULL",
+                Long.class)).isEqualTo(1L);
+    }
+
+    @Test
+    void rolledBackTransactionDeliversNothing() throws Exception {
+        var bus = context.getBean(TransactionAwareAsynchronousBus.class);
+        var transactions = context.getBean(TransactionTemplate.class);
+        var jdbcTemplate = context.getBean(JdbcTemplate.class);
+        long rowsBefore = outboxRowCount(jdbcTemplate);
+
+        transactions.executeWithoutResult(status -> {
+            bus.publish(new OrderConfirmed(1337));
+            status.setRollbackOnly();
+        });
+
+        // proving absence needs a deadline, not a poll-until: give the relay several ticks
+        Thread.sleep(500);
+
+        assertThat(outboxRowCount(jdbcTemplate))
+                .as("the outbox row must roll back with the business transaction")
+                .isEqualTo(rowsBefore);
+        var connection = context.getBean(Connection.class);
+        try (var channel = connection.createChannel()) {
+            assertThat(channel.basicGet("billing-silo-order-worker", true))
+                    .as("a rolled-back publish must never reach the broker")
+                    .isNull();
+        }
+    }
+
+    private static long outboxRowCount(JdbcTemplate jdbcTemplate) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM messaging_outbox", Long.class);
     }
 
     private static com.rabbitmq.client.GetResponse awaitDelivery(String queue, Duration deadline) throws Exception {
@@ -143,8 +171,8 @@ class MessagingWiringIntegrationTest {
 
         @Bean
         RabbitMqConnectionSettings rabbitSettings() {
-            return new RabbitMqConnectionSettings(
-                    rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword());
+            return new RabbitMqConnectionSettings(rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(),
+                    rabbit.getAdminPassword());
         }
 
         @Bean(destroyMethod = "close")
@@ -164,16 +192,15 @@ class MessagingWiringIntegrationTest {
 
         @Bean
         MessageNameRegistry messageNames() {
-            return MessageNameRegistry.builder()
-                    .register(OrderConfirmed.class, "order-silo.order-confirmed")
-                    .freeze();
+            return MessageNameRegistry.builder().register(OrderConfirmed.class, "order-silo.order-confirmed").freeze();
         }
 
         @Bean
         TopologyDeclaration rabbitTopology(
                 Connection connection,
                 io.github.siloverse.messaging.core.consumer.ConsumerRegistry consumers,
-                MessageNameRegistry names) {
+                MessageNameRegistry names
+        ) {
             var declarer = new RabbitMqTopologyDeclarer(connection);
             return () -> {
                 declarer.declarePublisherTopology(names);

@@ -15,10 +15,13 @@ dependencies {
     implementation(local.spring.context)
     implementation(local.spring.jdbc)
 
+    testImplementation(project(":messaging:messaging-rabbitmq"))
+
     testImplementation(local.assertj.core)
     testImplementation(local.jakarta.annotation.api)
     testImplementation(local.spring.tx)
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.rabbitmq)
 
     testRuntimeOnly(local.slf4j.simple)
     testRuntimeOnly(local.postgresql)
