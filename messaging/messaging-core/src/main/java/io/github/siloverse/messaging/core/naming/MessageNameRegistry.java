@@ -3,6 +3,7 @@ package io.github.siloverse.messaging.core.naming;
 import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -48,6 +49,10 @@ public final class MessageNameRegistry {
                             + "to the MessageNameRegistry in its messages module.");
         }
         return name;
+    }
+
+    public List<String> allNames() {
+        return this.names.values().stream().toList();
     }
 
     public static final class Builder {

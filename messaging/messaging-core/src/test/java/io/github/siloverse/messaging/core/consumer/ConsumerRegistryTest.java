@@ -31,6 +31,7 @@ class ConsumerRegistryTest {
         consumerRegistry.register(
                 definition2
         );
+        consumerRegistry.freeze();
         var consumers = consumerRegistry.eventConsumersFor(OrderConfirmed.class);
 
         assertThat(consumers).hasSize(2);
@@ -47,6 +48,8 @@ class ConsumerRegistryTest {
         consumerRegistry.register(
                 definition1
         );
+
+        consumerRegistry.freeze();
 
         var consumer = consumerRegistry.commandConsumerFor(ConfirmOrder.class);
 
@@ -93,6 +96,7 @@ class ConsumerRegistryTest {
 
     @Test
     void testCommandConsumerForWithNothingRegistered() {
+        consumerRegistry.freeze();
         assertThatThrownBy(() -> consumerRegistry.commandConsumerFor(ConfirmOrder.class))
                 .isInstanceOf(NoHandlerException.class)
                 .hasMessageContaining("No consumer registered for command");
@@ -101,6 +105,7 @@ class ConsumerRegistryTest {
     @Test
     void testEventConsumersForWithNothingRegistered() {
         // zero subscribers is a legitimate pub-sub state: empty list, no exception
+        consumerRegistry.freeze();
         var consumers = consumerRegistry.eventConsumersFor(OrderConfirmed.class);
 
         assertThat(consumers).isEmpty();
@@ -117,14 +122,10 @@ class ConsumerRegistryTest {
         assertThatThrownBy(() -> consumerRegistry.register(definition2))
                 .isInstanceOf(MessagingConfigurationException.class);
 
-        // the FAILED registration must leave no trace:
-        // 1) ConfirmOrder must NOT be in the command map
-        assertThatThrownBy(() -> consumerRegistry.commandConsumerFor(ConfirmOrder.class))
-                .isInstanceOf(NoHandlerException.class);
-
-        // 2) registering the same consumer under a fresh id must now succeed
+        // registering the same consumer under a fresh id must now succeed
         var retry = ConsumerDefinitionHelper.createConsumerDef("confirm-order-1", ConfirmOrder.class);
         consumerRegistry.register(retry);
+        consumerRegistry.freeze();
         assertThat(consumerRegistry.commandConsumerFor(ConfirmOrder.class).id())
                 .isEqualTo("confirm-order-1");
     }
@@ -150,5 +151,28 @@ class ConsumerRegistryTest {
         // the rejected consumer's id must still be usable for a different message
         consumerRegistry.register(
                 ConsumerDefinitionHelper.createConsumerDef("confirm-order-2", OrderConfirmed.class));
+    }
+
+    @Test
+    void testAllConsumersEnumeratesEventAndCommandDefinitions() {
+        consumerRegistry.register(
+                ConsumerDefinitionHelper.createConsumerDef("order-confirmed-1", OrderConfirmed.class));
+        consumerRegistry.register(ConsumerDefinitionHelper.createConsumerDef("confirm-order-1", ConfirmOrder.class));
+        consumerRegistry.freeze();
+
+        assertThat(consumerRegistry.allConsumers())
+                .extracting(ConsumerDefinition::id)
+                .containsExactlyInAnyOrder("order-confirmed-1", "confirm-order-1");
+    }
+
+    @Test
+    void testAllConsumersIsLookupGatedWhileInitializing() {
+        consumerRegistry.register(
+                ConsumerDefinitionHelper.createConsumerDef("order-confirmed-1", OrderConfirmed.class));
+        consumerRegistry.beginInitialization();
+
+        // same gate as the other lookups: a partial view would silently miss consumers scanned later
+        assertThatThrownBy(() -> consumerRegistry.allConsumers())
+                .hasMessageContaining("initializing");
     }
 }

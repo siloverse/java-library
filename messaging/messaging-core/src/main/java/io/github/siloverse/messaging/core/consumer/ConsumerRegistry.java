@@ -6,18 +6,22 @@ import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.error.NoHandlerException;
 
 import java.util.*;
+import java.util.stream.Stream;
 
 public class ConsumerRegistry {
 
     /**
-     * Lifecycle of the registry.
+     * Lifecycle of the registry. Write-only while being built, read-only once frozen:
+     * lookups throw until FROZEN, registrations throw after it. {@code freeze()} is the
+     * explicit construction-complete signal in every usage, plain Java and unit tests
+     * included.
      *
-     * <p>OPEN: registrations and lookups both work. The state of a registry used
-     * without any lifecycle management (plain Java, unit tests) -- freezing is opt-in, not ceremony.
+     * <p>OPEN: registrations work, lookups THROW -- a registry still being built may be
+     * missing consumers registered later, so reading it would silently skip them.
      *
-     * <p>INITIALIZING: registrations work, lookups THROW. Entered via
-     * beginInitialization() by a lifecycle manager (the Spring initializer) that knows scanning is underway and
-     * incomplete -- publishing now would silently miss consumers scanned later.
+     * <p>INITIALIZING: behaviorally identical to OPEN. The marker a lifecycle manager
+     * (the Spring initializer) sets via beginInitialization() to make scanning-underway
+     * explicit and to reject re-initialization of a frozen registry.
      *
      * <p>FROZEN: lookups work, registrations THROW. Topology is final; broker
      * adapters may read it, listener threads may share it (no further mutation means the plain HashMaps are safely
@@ -54,7 +58,7 @@ public class ConsumerRegistry {
 
     public void register(ConsumerDefinition def) {
 
-        if (state == State.FROZEN) {
+        if (isFrozen()) {
             throw new MessagingException(
                     "Registry is frozen -- cannot register consumer '" + def.id() + "'. "
                             + "Topology must not change after startup: broker queues and listeners "
@@ -103,13 +107,26 @@ public class ConsumerRegistry {
         return def;
     }
 
+    public List<ConsumerDefinition> allConsumers() {
+        assertLookupAllowed();
+
+        return Stream.of(
+                        commandConsumers.values().stream().toList(),
+                        eventConsumers.values().stream().flatMap(List::stream).toList()
+                ).flatMap(List::stream)
+                .toList();
+    }
+
     private void assertLookupAllowed() {
-        if (state == State.INITIALIZING) {
+        if (state != State.FROZEN) {
             throw new MessagingException(
-                    "Messaging is still initializing -- consumer scanning has not completed. "
-                            + "Publishing from @PostConstruct or during bean creation is not supported: "
-                            + "the registry may be missing consumers scanned later, so dispatch would "
-                            + "silently skip them. Publish from an ApplicationRunner or after startup instead.");
+                    "Registry is not frozen -- lookups are allowed only after construction completes. "
+                            + "A registry still open or initializing may be missing consumers registered "
+                            + "later, so dispatch or topology reads would silently skip them. Freeze the "
+                            + "registry after the last registration (the Spring initializer freezes after "
+                            + "scanning; plain-Java use calls freeze() explicitly). Publishing from "
+                            + "@PostConstruct or during bean creation is not supported -- publish from an "
+                            + "ApplicationRunner or after startup instead.");
         }
     }
 }
