@@ -2,6 +2,7 @@ package io.github.siloverse.messaging.rabbitmq.transport;
 
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -11,6 +12,8 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -18,13 +21,14 @@ class RabbitMqMessageTransportTest {
 
     static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:4.1-management-alpine");
 
+    static ConnectionFactory factory;
     static Connection connection;
 
     @BeforeAll
     static void startBrokerAndConnect() throws Exception {
         rabbit.start();
 
-        var factory = new ConnectionFactory();
+        factory = new ConnectionFactory();
         factory.setHost(rabbit.getHost());
         factory.setPort(rabbit.getAmqpPort());
         factory.setUsername(rabbit.getAdminUsername());
@@ -72,5 +76,43 @@ class RabbitMqMessageTransportTest {
                     .as("envelope headers must survive the wire")
                     .hasToString("application/json");
         }
+    }
+
+    @Test
+    void sendToMissingExchangeFailsLoudlyInsteadOfHangingForever() throws Exception {
+        // nobody declared this exchange: the broker kills the channel with a 404 AFTER
+        // basicPublish already succeeded locally, so no confirm will ever arrive
+        var envelope = envelope("order-silo.never-declared");
+        var transport = new RabbitMqMessageTransport(connection);
+
+        // run send() on another thread so a hanging implementation fails this test
+        // instead of hanging the build
+        var pendingSend = CompletableFuture.runAsync(() -> transport.send(envelope));
+
+        assertThatThrownBy(() -> pendingSend.get(5, TimeUnit.SECONDS))
+                .as("a dead channel must fail the blocked caller with the culprit named -- "
+                        + "a TimeoutException here means send() hangs forever")
+                .hasCauseInstanceOf(MessagingException.class)
+                .cause().hasMessageContaining("order-silo.never-declared");
+    }
+
+    @Test
+    void sendOnDeadConnectionThrowsMessagingExceptionNotClientInternals() throws Exception {
+        var ownConnection = factory.newConnection();
+        var transport = new RabbitMqMessageTransport(ownConnection);
+        ownConnection.close();
+
+        assertThatThrownBy(() -> transport.send(envelope("order-silo.order-confirmed")))
+                .as("the port promises MessagingException -- the AMQP client's own exception "
+                        + "types must never escape the transport")
+                .isInstanceOf(MessagingException.class);
+    }
+
+    private static Envelope envelope(String messageType) {
+        return new Envelope(
+                UUID.randomUUID(),
+                messageType,
+                Map.of("content-type", "application/json"),
+                "{\"orderId\":42}".getBytes(StandardCharsets.UTF_8));
     }
 }
