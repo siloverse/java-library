@@ -65,6 +65,30 @@ class MessageNameRegistryTest {
     }
 
     @Test
+    void testWireNameResolvesBackToItsClass() {
+        var registry = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .register(ConfirmOrder.class, "order-silo.confirm-order")
+                .freeze();
+
+        // the consumer's direction: a delivery carries the wire name, dispatch needs the class
+        assertThat(registry.classOf("order-silo.order-confirmed")).isEqualTo(OrderConfirmed.class);
+        assertThat(registry.classOf("order-silo.confirm-order")).isEqualTo(ConfirmOrder.class);
+    }
+
+    @Test
+    void testUnknownWireNameThrowsWithCulpritAndFix() {
+        var registry = MessageNameRegistry.builder()
+                .register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .freeze();
+
+        assertThatThrownBy(() -> registry.classOf("order-silo.order-cancelled"))
+                .isInstanceOf(MessagingConfigurationException.class)
+                .hasMessageContaining("order-silo.order-cancelled")   // culprit
+                .hasMessageContaining("register");                    // fix
+    }
+
+    @Test
     void testComposeMergesContractJarRegistries() {
         var orderSilo = MessageNameRegistry.builder()
                 .register(OrderConfirmed.class, "order-silo.order-confirmed")

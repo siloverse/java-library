@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Immutable map from message class to its wire name (the broker routing key).
@@ -31,9 +32,14 @@ import java.util.Objects;
 public final class MessageNameRegistry {
 
     private final Map<Class<?>, String> names;
+    private final Map<String, Class<?>> classes;
 
     private MessageNameRegistry(Map<Class<?>, String> names) {
         this.names = Map.copyOf(names);
+        // derived, not passed in: builder guarantees wire names are unique, and deriving
+        // keeps compose() correct with no second code path
+        this.classes = this.names.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getValue, Map.Entry::getKey));
     }
 
     public static Builder builder() {
@@ -60,6 +66,19 @@ public final class MessageNameRegistry {
 
     public List<String> allNames() {
         return this.names.values().stream().toList();
+    }
+
+    public Class<?> classOf(String name) {
+        Objects.requireNonNull(name, "name must not be null");
+        Class<?> messageClass = classes.get(name);
+        if (messageClass == null) {
+            throw new MessagingConfigurationException(
+                    "No message class registered for wire name '" + name + "'. This service's"
+                            + " registry is missing the contract jar that registers it -- compose the"
+                            + " publishing silo's registry (e.g. compose(OwnMessages.names(),"
+                            + " OtherSiloMessages.names())) into this service's MessageNameRegistry.");
+        }
+        return messageClass;
     }
 
     public static final class Builder {
