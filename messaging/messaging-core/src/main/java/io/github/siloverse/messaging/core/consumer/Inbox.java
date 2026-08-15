@@ -15,6 +15,13 @@ import java.util.UUID;
  *
  * <p>The resulting guarantee: at-least-once invocation, exactly-once COMMITTED effects.
  * Side effects outside the transaction are not covered.
+ *
+ * <p>Scope of "committed effects": the transaction is thread-bound and joined by
+ * propagation. Work joins it only when it runs synchronously on the invoking thread against
+ * the same {@code DataSource}/transaction manager -- including {@code @Transactional
+ * (REQUIRED)} handlers and transaction-aware bus publishes. Work on another thread, another
+ * {@code DataSource}, or under {@code REQUIRES_NEW} commits separately and falls outside
+ * the guarantee. See {@link Consumer#dedup()} for the full rules.
  */
 public interface Inbox {
 

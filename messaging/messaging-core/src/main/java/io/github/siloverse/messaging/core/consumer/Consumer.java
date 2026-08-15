@@ -23,6 +23,17 @@ public @interface Consumer {
      * side effects OUTSIDE that transaction (emails, HTTP calls) remain the handler's
      * responsibility; publish follow-up messages via the transaction-aware bus to keep them
      * inside the guarantee.
+     *
+     * <p><b>Transaction scope rules</b> (the transaction is thread-bound and joined by
+     * propagation). INSIDE the guarantee: synchronous work on the consumer thread against
+     * the service's own {@code DataSource} (repositories, {@code JdbcTemplate});
+     * {@code @Transactional} on the handler with default {@code REQUIRED} propagation
+     * (joins, one commit); {@code TransactionAwareAsynchronousBus} publishes (the outbox row
+     * commits atomically with the inbox row -- exactly-once message chaining). OUTSIDE, no
+     * exceptions: a second {@code DataSource} or transaction manager (that would be 2PC);
+     * anything on ANOTHER THREAD (executors, {@code CompletableFuture} -- it looks inside
+     * the method but leaves the transaction); {@code REQUIRES_NEW}; emails, HTTP calls,
+     * files, direct {@code AsynchronousBus} publishes.
      */
     boolean dedup() default false;
 }
