@@ -1,6 +1,6 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
-val libraryVersion = "0.1.0"
+val libraryVersion = "0.2.0-SNAPSHOT"
 
 subprojects {
     group = "io.github.siloverse"
