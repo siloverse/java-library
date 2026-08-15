@@ -5,7 +5,9 @@ import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.consumer.Consumer;
 import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
 import io.github.siloverse.messaging.core.consumer.ConsumerRegistry;
+import io.github.siloverse.messaging.core.consumer.Inbox;
 import io.github.siloverse.messaging.core.dispatch.MessageDispatcher;
+import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.PayloadDeserializer;
@@ -22,8 +24,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -132,6 +136,51 @@ class RabbitMqMessageListenerTest {
         }
     }
 
+    @Test
+    void dedupConsumerProcessesADuplicateDeliveryExactlyOnce() throws Exception {
+        var worker = new RecordingDedupWorker();
+        var consumers = registryFor("order-dedup", OrderConfirmed.class, worker, "onOrderConfirmed", true);
+        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
+
+        var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
+                new IntPayloadDeserializer(), new MessageDispatcher(), new InMemoryInbox());
+        listener.start();
+        try {
+            // same messageId twice = the wire-level duplicate the relay's crash story promises
+            var duplicateId = UUID.randomUUID();
+            var transport = new RabbitMqMessageTransport(publishConnection);
+            transport.send(new Envelope(duplicateId, "order-silo.order-confirmed",
+                    Map.of("content-type", "text/plain"), "42".getBytes(StandardCharsets.UTF_8)));
+            transport.send(new Envelope(duplicateId, "order-silo.order-confirmed",
+                    Map.of("content-type", "text/plain"), "42".getBytes(StandardCharsets.UTF_8)));
+
+            assertThat(worker.received.poll(10, TimeUnit.SECONDS))
+                    .as("the first delivery is processed")
+                    .isEqualTo(new OrderConfirmed(42));
+            assertThat(worker.received.poll(2, TimeUnit.SECONDS))
+                    .as("the duplicate is acked away WITHOUT reaching business logic")
+                    .isNull();
+        } finally {
+            listener.stop();
+        }
+    }
+
+    @Test
+    void dedupConsumerWithoutAnInboxFailsStartNamingTheConsumer() {
+        var worker = new RecordingDedupWorker();
+        var consumers = registryFor("order-dedup-unwired", OrderConfirmed.class, worker, "onOrderConfirmed", true);
+
+        var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
+                new IntPayloadDeserializer(), new MessageDispatcher());
+
+        assertThatThrownBy(listener::start)
+                .as("dedup = true is a promise the listener cannot keep without an Inbox --"
+                        + " refuse loudly at startup, not silently at first duplicate")
+                .isInstanceOf(MessagingConfigurationException.class)
+                .hasMessageContaining("order-dedup-unwired")
+                .hasMessageContaining("Inbox");
+    }
+
     // -- fixtures ------------------------------------------------------------
 
     public record OrderConfirmed(int orderId) implements Event {
@@ -149,6 +198,29 @@ class RabbitMqMessageListenerTest {
         @Consumer(id = "order-recorder")
         void onOrderConfirmed(OrderConfirmed event) {
             received.add(event);
+        }
+    }
+
+    static final class RecordingDedupWorker {
+        final BlockingQueue<OrderConfirmed> received = new LinkedBlockingQueue<>();
+
+        @Consumer(id = "order-dedup", dedup = true)
+        void onOrderConfirmed(OrderConfirmed event) {
+            received.add(event);
+        }
+    }
+
+    /** In-memory stand-in for the JDBC inbox: enough to prove the listener honors the flag. */
+    static final class InMemoryInbox implements Inbox {
+        private final Set<String> processed = ConcurrentHashMap.newKeySet();
+
+        @Override
+        public boolean processOnce(String consumerId, UUID messageId, Runnable invocation) {
+            if (!processed.add(consumerId + ":" + messageId)) {
+                return false;
+            }
+            invocation.run();
+            return true;
         }
     }
 
@@ -203,11 +275,16 @@ class RabbitMqMessageListenerTest {
     }
 
     private static ConsumerRegistry registryFor(String id, Class<?> messageClass, Object worker, String methodName) {
+        return registryFor(id, messageClass, worker, methodName, false);
+    }
+
+    private static ConsumerRegistry registryFor(
+            String id, Class<?> messageClass, Object worker, String methodName, boolean dedup) {
         try {
             var registry = new ConsumerRegistry();
             var method = worker.getClass().getDeclaredMethod(methodName, messageClass);
             method.setAccessible(true); // registration's contract: the scanner does this at scan time
-            registry.register(new ConsumerDefinition(id, messageClass, worker, method, -1));
+            registry.register(new ConsumerDefinition(id, messageClass, worker, method, -1, dedup));
             registry.freeze();
             return registry;
         } catch (NoSuchMethodException e) {
