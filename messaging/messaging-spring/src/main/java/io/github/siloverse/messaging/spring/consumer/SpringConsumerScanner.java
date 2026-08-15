@@ -27,6 +27,6 @@ public class SpringConsumerScanner {
         var invocable = AopUtils.selectInvocableMethod(def.method(), bean.getClass());
         return invocable == def.method() ? def
                 : new ConsumerDefinition(def.id(), def.messageClass(), def.bean(),
-                        invocable, def.contextParameterIndex());
+                        invocable, def.contextParameterIndex(), def.dedup());
     }
 }

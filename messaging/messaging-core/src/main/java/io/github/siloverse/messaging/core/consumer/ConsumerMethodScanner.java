@@ -96,6 +96,6 @@ public final class ConsumerMethodScanner {
         // 5. all checks passed — only now mutate
         consumerMethod.setAccessible(true);
 
-        return new ConsumerDefinition(id, messageClass, bean, consumerMethod, -1);
+        return new ConsumerDefinition(id, messageClass, bean, consumerMethod, -1, consumerAnnotation.dedup());
     }
 }

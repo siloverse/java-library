@@ -153,6 +153,26 @@ class ConsumerMethodScannerTest {
     static final class AmbiguousMessage implements Event, Command {
     }
 
+    @Test
+    void dedupDefaultsToFalse() {
+        var definitions = scanner.scan(new ValidConsumers());
+
+        assertThat(definitions).allSatisfy(definition -> assertThat(definition.dedup()).isFalse());
+    }
+
+    @Test
+    void dedupFlagIsCarriedIntoTheDefinition() {
+        var definitions = scanner.scan(new DedupConsumer());
+
+        assertThat(definitions.getFirst().dedup()).isTrue();
+    }
+
+    static final class DedupConsumer {
+        @Consumer(id = "test.dedup", dedup = true)
+        public void onEvent(TestEvent event) {
+        }
+    }
+
     static class ValidConsumers {
         @Consumer(id = "test.event")
         public void onEvent(TestEvent event) {
