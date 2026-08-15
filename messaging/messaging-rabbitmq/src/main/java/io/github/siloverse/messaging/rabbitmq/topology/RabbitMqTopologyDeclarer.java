@@ -1,6 +1,7 @@
 package io.github.siloverse.messaging.rabbitmq.topology;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
@@ -18,17 +19,29 @@ import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
  * Declares broker topology from the frozen registries at startup.
  *
  * <p>Each side declares what it touches: publishers declare one durable fanout exchange per
- * wire name (so a legal zero-consumer publish is a clean no-op instead of a 404); consumers
- * additionally declare their queue {@code <service>-<consumer-id>} and bind it to the
- * exchange. Declarations are idempotent -- both sides declaring the same exchange, and
- * restarts re-declaring everything, are no-ops by AMQP contract.
+ * wire name (so a legal zero-consumer publish is a clean no-op instead of a 404); consumers additionally declare their
+ * queue {@code <service>-<consumer-id>}, its dead-letter queue {@code <service>-<consumer-id>.dlq}, and bind the
+ * consumer queue to the exchange. Declarations are idempotent -- both sides declaring the same exchange, and restarts
+ * re-declaring everything, are no-ops by AMQP contract.
+ *
+ * <p>Dead-letter wiring makes the listener's give-up path loss-proof: a delivery nacked
+ * without requeue is routed (via the default exchange, no extra exchange objects) into the
+ * {@code .dlq} parking queue, keeping its identity plus the broker's {@code x-death} audit
+ * headers, where it waits for a human -- parked, never dropped. The parking queue is
+ * terminal (no dead-letter arguments of its own, so no loops) and is always declared BEFORE
+ * the queue that points at it: no state may exist, however briefly, in which a nack could
+ * route to a missing queue and vanish. Queue arguments are immutable on the broker --
+ * changing them against live queues fails with 406 (see failure tiers below).
  *
  * <p>Failure tiers: an exchange already declared with different settings (406
- * precondition-failed) or a consumed class missing from the name registry is a
- * {@link MessagingConfigurationException}; broker/connection trouble is a plain
- * {@link MessagingException}. Both abort startup.
+ * precondition-failed) or a consumed class missing from the name registry is a {@link MessagingConfigurationException};
+ * broker/connection trouble is a plain {@link MessagingException}. Both abort startup.
  */
 public class RabbitMqTopologyDeclarer {
+
+    private static final String X_DEAD_LETTER_EXCHANGE = "x-dead-letter-exchange";
+
+    private static final String X_DEAD_LETTER_ROUTING_KEY = "x-dead-letter-routing-key";
 
     private final Connection connection;
 
@@ -90,10 +103,18 @@ public class RabbitMqTopologyDeclarer {
     }
 
     private static void declareQueue(Channel channel, String queue) {
+        String deadLetterQueue = queue + ".dlq";
+        declareOneQueue(channel, deadLetterQueue, null);          // parking lot first: the work
+        declareOneQueue(channel, queue, Map.of(                   // queue must never point at a
+                X_DEAD_LETTER_EXCHANGE, "",                       // missing dlq
+                X_DEAD_LETTER_ROUTING_KEY, deadLetterQueue));
+    }
+
+    private static void declareOneQueue(Channel channel, String name, Map<String, Object> arguments) {
         try {
-            channel.queueDeclare(queue, true, false, false, null);
+            channel.queueDeclare(name, true, false, false, arguments);
         } catch (IOException e) {
-            throw declarationFailure("queue '" + queue + "'", e);
+            throw declarationFailure("queue '" + name + "'", e);
         }
     }
 

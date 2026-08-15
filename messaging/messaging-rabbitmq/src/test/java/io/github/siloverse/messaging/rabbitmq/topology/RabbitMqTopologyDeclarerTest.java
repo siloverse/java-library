@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,6 +59,51 @@ class RabbitMqTopologyDeclarerTest {
                     .as("queue <service>-<consumer-id> must exist and be bound to the message type's exchange")
                     .isNotNull();
         }
+    }
+
+    @Test
+    void nackedWithoutRequeueParksInTheDeadLetterQueueInsteadOfVanishing() throws Exception {
+        var consumers = new ConsumerRegistry();
+        consumers.register(definition("order-parker", OrderConfirmed.class, "onOrderConfirmed"));
+        consumers.freeze();
+
+        var declarer = new RabbitMqTopologyDeclarer(connection);
+        declarer.declareConsumerTopology("billing-silo", consumers, names());
+
+        new RabbitMqMessageTransport(connection).send(envelope("order-silo.order-confirmed"));
+
+        String parkedMessageId;
+        try (var channel = connection.createChannel()) {
+            var delivered = channel.basicGet("billing-silo-order-parker", false); // manual-ack mode
+            assertThat(delivered).isNotNull();
+            parkedMessageId = delivered.getProps().getMessageId();
+
+            // the give-up path of the failure policy: no requeue -- must PARK, never drop
+            channel.basicNack(delivered.getEnvelope().getDeliveryTag(), false, false);
+        }
+
+        var parked = awaitParked("billing-silo-order-parker.dlq", Duration.ofSeconds(5));
+        assertThat(parked.getProps().getMessageId())
+                .as("the parked message keeps its wire identity for diagnosis and replay")
+                .isEqualTo(parkedMessageId);
+        assertThat(parked.getProps().getHeaders())
+                .as("the broker's dead-letter audit trail (why/where/when, attempt counting later)")
+                .containsKey("x-death");
+    }
+
+    private static com.rabbitmq.client.GetResponse awaitParked(String queue, Duration deadline) throws Exception {
+        var end = Instant.now().plus(deadline);
+        while (Instant.now().isBefore(end)) {
+            // fresh channel per attempt: a missing queue 404s and kills the channel
+            try (var channel = connection.createChannel()) {
+                var response = channel.basicGet(queue, true);
+                if (response != null) {
+                    return response;
+                }
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("no message parked in '" + queue + "' within " + deadline);
     }
 
     @Test
