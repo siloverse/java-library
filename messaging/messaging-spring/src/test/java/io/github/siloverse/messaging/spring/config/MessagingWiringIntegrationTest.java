@@ -11,9 +11,12 @@ import io.github.siloverse.messaging.core.transport.PayloadSerializer;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnectionSettings;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnector;
 import io.github.siloverse.messaging.rabbitmq.topology.RabbitMqTopologyDeclarer;
+import io.github.siloverse.messaging.rabbitmq.listener.RabbitMqMessageListener;
 import io.github.siloverse.messaging.rabbitmq.transport.RabbitMqMessageTransport;
+import io.github.siloverse.messaging.spring.listener.MessageListener;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelaySettings;
 import io.github.siloverse.messaging.spring.topology.TopologyDeclaration;
+import io.github.siloverse.messaging.spring.serialization.JacksonPayloadDeserializer;
 import io.github.siloverse.messaging.spring.serialization.JacksonPayloadSerializer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,7 +36,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -68,19 +73,18 @@ class MessagingWiringIntegrationTest {
     }
 
     @Test
-    void committedTransactionDeliversTheEventToTheConsumerQueue() throws Exception {
+    void committedTransactionReachesTheConsumerMethodAsATypedEvent() throws Exception {
         var bus = context.getBean(TransactionAwareAsynchronousBus.class);
         var transactions = context.getBean(TransactionTemplate.class);
+        var worker = context.getBean(OrderWorker.class);
 
         transactions.executeWithoutResult(status -> bus.publish(new OrderConfirmed(42)));
 
-        // no listener exists yet, so the delivered message WAITS in the queue for us to read
-        var delivered = awaitDelivery("billing-silo-order-worker", Duration.ofSeconds(10));
-
-        assertThat(new String(delivered.getBody(), StandardCharsets.UTF_8)).contains("42");
-        assertThat(delivered.getProps().getMessageId()).isNotBlank();
-        assertThat(delivered.getProps().getDeliveryMode()).as("the pipeline must preserve persistence end to end")
-                .isEqualTo(2);
+        // the WHOLE pipeline: tx -> outbox -> relay -> broker -> queue -> listener -> method
+        var received = worker.received.poll(10, TimeUnit.SECONDS);
+        assertThat(received)
+                .as("the @Consumer method must receive the deserialized, typed event")
+                .isEqualTo(new OrderConfirmed(42));
 
         // the relay's half of the proof: the shipped row is stamped as published
         var jdbcTemplate = context.getBean(JdbcTemplate.class);
@@ -106,31 +110,13 @@ class MessagingWiringIntegrationTest {
         assertThat(outboxRowCount(jdbcTemplate))
                 .as("the outbox row must roll back with the business transaction")
                 .isEqualTo(rowsBefore);
-        var connection = context.getBean(Connection.class);
-        try (var channel = connection.createChannel()) {
-            assertThat(channel.basicGet("billing-silo-order-worker", true))
-                    .as("a rolled-back publish must never reach the broker")
-                    .isNull();
-        }
+        assertThat(context.getBean(OrderWorker.class).received.poll(1, TimeUnit.SECONDS))
+                .as("a rolled-back publish must never reach a consumer")
+                .isNull();
     }
 
     private static long outboxRowCount(JdbcTemplate jdbcTemplate) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM messaging_outbox", Long.class);
-    }
-
-    private static com.rabbitmq.client.GetResponse awaitDelivery(String queue, Duration deadline) throws Exception {
-        var connection = context.getBean(Connection.class);
-        var end = Instant.now().plus(deadline);
-        try (var channel = connection.createChannel()) {
-            while (Instant.now().isBefore(end)) {
-                var response = channel.basicGet(queue, true);
-                if (response != null) {
-                    return response;
-                }
-                Thread.sleep(50);
-            }
-        }
-        throw new AssertionError("no message arrived in queue '" + queue + "' within " + deadline);
     }
 
     // -- the application's side of the contract ------------------------------
@@ -139,8 +125,11 @@ class MessagingWiringIntegrationTest {
     }
 
     public static class OrderWorker {
+        final BlockingQueue<OrderConfirmed> received = new LinkedBlockingQueue<>();
+
         @Consumer(id = "order-worker")
         void on(OrderConfirmed event) {
+            received.add(event);
         }
     }
 
@@ -211,6 +200,43 @@ class MessagingWiringIntegrationTest {
         @Bean
         OutboxRelaySettings outboxRelaySettings() {
             return new OutboxRelaySettings(Duration.ofMillis(100));
+        }
+
+        @Bean
+        MessageListener rabbitListener(
+                RabbitMqConnectionSettings settings,
+                io.github.siloverse.messaging.core.consumer.ConsumerRegistry consumers,
+                MessageNameRegistry names,
+                ObjectMapper objectMapper,
+                io.github.siloverse.messaging.core.dispatch.MessageDispatcher dispatcher
+        ) {
+            // the consume connection is the listening machinery's internal detail, not a
+            // context bean: opened on start, closed on stop, never shared with publishing
+            return new MessageListener() {
+                private Connection consumeConnection;
+                private RabbitMqMessageListener listener;
+
+                @Override
+                public void start() {
+                    consumeConnection = RabbitMqConnector.connect(settings);
+                    listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names,
+                            new JacksonPayloadDeserializer(objectMapper), dispatcher);
+                    listener.start();
+                }
+
+                @Override
+                public void stop() {
+                    if (listener != null) {
+                        listener.stop();
+                    }
+                    try {
+                        if (consumeConnection != null) {
+                            consumeConnection.close();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            };
         }
 
         @Bean

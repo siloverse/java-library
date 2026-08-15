@@ -9,6 +9,7 @@ import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
 import io.github.siloverse.messaging.core.transport.OutboxWriter;
 import io.github.siloverse.messaging.core.transport.PayloadSerializer;
+import io.github.siloverse.messaging.spring.listener.MessageListener;
 import io.github.siloverse.messaging.spring.outbox.JdbcOutboxWriter;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelay;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelaySettings;
@@ -67,12 +68,14 @@ public class AsyncMessagingConfiguration {
     MessagingLifecycle messagingLifecycle(
             OutboxRelay outboxRelay,
             ObjectProvider<OutboxRelaySettings> settings,
-            ObjectProvider<TopologyDeclaration> topologyDeclarations
+            ObjectProvider<TopologyDeclaration> topologyDeclarations,
+            ObjectProvider<MessageListener> messageListeners
     ) {
         return new MessagingLifecycle(
                 outboxRelay,
                 settings.getIfAvailable(() -> OutboxRelaySettings.DEFAULT),
-                topologyDeclarations.orderedStream().toList()
+                topologyDeclarations.orderedStream().toList(),
+                messageListeners.orderedStream().toList()
         );
     }
 }
