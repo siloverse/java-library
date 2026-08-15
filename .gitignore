@@ -5,6 +5,4 @@
 /.idea/
 /.kotlin/
 **/build/
-/gradle/wrapper/gradle-wrapper.jar
 /gradlew.bat
-/gradlew
