@@ -6,6 +6,7 @@ import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.api.TransactionAwareAsynchronousBus;
 import io.github.siloverse.messaging.core.consumer.Consumer;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
+import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
 import io.github.siloverse.messaging.core.transport.PayloadSerializer;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnectionSettings;
@@ -13,6 +14,7 @@ import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnector;
 import io.github.siloverse.messaging.rabbitmq.topology.RabbitMqTopologyDeclarer;
 import io.github.siloverse.messaging.rabbitmq.listener.RabbitMqMessageListener;
 import io.github.siloverse.messaging.rabbitmq.transport.RabbitMqMessageTransport;
+import io.github.siloverse.messaging.spring.inbox.JdbcInbox;
 import io.github.siloverse.messaging.spring.listener.MessageListener;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelaySettings;
 import io.github.siloverse.messaging.spring.topology.TopologyDeclaration;
@@ -36,6 +38,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -115,6 +118,34 @@ class MessagingWiringIntegrationTest {
                 .isNull();
     }
 
+    @Test
+    void duplicateWireDeliveryReachesTheDedupConsumerExactlyOnce() throws Exception {
+        var transport = context.getBean(MessageTransport.class);
+        var worker = context.getBean(OrderWorker.class);
+        var objectMapper = context.getBean(ObjectMapper.class);
+
+        // byte-identical duplicate with one messageId: what the relay's crash story produces
+        var duplicateId = UUID.randomUUID();
+        var payload = objectMapper.writeValueAsBytes(new OrderConfirmed(77));
+        var headers = java.util.Map.of("content-type", "application/json");
+        transport.send(new Envelope(duplicateId, "order-silo.order-confirmed", headers, payload));
+        transport.send(new Envelope(duplicateId, "order-silo.order-confirmed", headers, payload));
+
+        assertThat(worker.received.poll(10, TimeUnit.SECONDS))
+                .as("the first delivery is processed")
+                .isEqualTo(new OrderConfirmed(77));
+        assertThat(worker.received.poll(2, TimeUnit.SECONDS))
+                .as("the duplicate must be deduplicated by the JDBC inbox, not reprocessed")
+                .isNull();
+
+        var jdbcTemplate = context.getBean(JdbcTemplate.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM messaging_inbox WHERE consumer_id = 'order-worker' AND message_id = ?",
+                Long.class, duplicateId))
+                .as("exactly one ledger entry for the pair")
+                .isEqualTo(1L);
+    }
+
     private static long outboxRowCount(JdbcTemplate jdbcTemplate) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM messaging_outbox", Long.class);
     }
@@ -127,7 +158,7 @@ class MessagingWiringIntegrationTest {
     public static class OrderWorker {
         final BlockingQueue<OrderConfirmed> received = new LinkedBlockingQueue<>();
 
-        @Consumer(id = "order-worker")
+        @Consumer(id = "order-worker", dedup = true)
         void on(OrderConfirmed event) {
             received.add(event);
         }
@@ -144,7 +175,8 @@ class MessagingWiringIntegrationTest {
         @Bean
         JdbcTemplate jdbcTemplate(DataSource dataSource) {
             var jdbcTemplate = new JdbcTemplate(dataSource);
-            jdbcTemplate.execute(shippedDdl());
+            jdbcTemplate.execute(shippedDdl("outbox-postgres.sql"));
+            jdbcTemplate.execute(shippedDdl("inbox-postgres.sql"));
             return jdbcTemplate;
         }
 
@@ -208,7 +240,9 @@ class MessagingWiringIntegrationTest {
                 io.github.siloverse.messaging.core.consumer.ConsumerRegistry consumers,
                 MessageNameRegistry names,
                 ObjectMapper objectMapper,
-                io.github.siloverse.messaging.core.dispatch.MessageDispatcher dispatcher
+                io.github.siloverse.messaging.core.dispatch.MessageDispatcher dispatcher,
+                JdbcTemplate jdbcTemplate,
+                TransactionTemplate transactionTemplate
         ) {
             // the consume connection is the listening machinery's internal detail, not a
             // context bean: opened on start, closed on stop, never shared with publishing
@@ -220,7 +254,8 @@ class MessagingWiringIntegrationTest {
                 public void start() {
                     consumeConnection = RabbitMqConnector.connect(settings);
                     listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names,
-                            new JacksonPayloadDeserializer(objectMapper), dispatcher);
+                            new JacksonPayloadDeserializer(objectMapper), dispatcher,
+                            new JdbcInbox(jdbcTemplate, transactionTemplate));
                     listener.start();
                 }
 
@@ -244,9 +279,9 @@ class MessagingWiringIntegrationTest {
             return new OrderWorker();
         }
 
-        private static String shippedDdl() {
+        private static String shippedDdl(String resource) {
             try (var ddl = MessagingWiringIntegrationTest.class.getResourceAsStream(
-                    "/io/github/siloverse/messaging/outbox-postgres.sql")) {
+                    "/io/github/siloverse/messaging/" + resource)) {
                 assertThat(ddl).as("shipped DDL resource must exist on the classpath").isNotNull();
                 return new String(ddl.readAllBytes(), StandardCharsets.UTF_8);
             } catch (IOException e) {

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -11,7 +12,9 @@ import com.rabbitmq.client.Delivery;
 import com.rabbitmq.client.ShutdownSignalException;
 import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
 import io.github.siloverse.messaging.core.consumer.ConsumerRegistry;
+import io.github.siloverse.messaging.core.consumer.Inbox;
 import io.github.siloverse.messaging.core.dispatch.MessageDispatcher;
+import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.PayloadDeserializer;
@@ -44,16 +47,28 @@ public class RabbitMqMessageListener {
     private final MessageNameRegistry messageNameRegistry;
     private final PayloadDeserializer payloadDeserializer;
     private final MessageDispatcher dispatcher;
+    private final Inbox inbox; // null = no dedup consumers allowed
 
     private final List<Channel> channels = new ArrayList<>();
     private boolean started;
 
+    /** Without an {@link Inbox}: every consumer must be idempotent; {@code dedup = true} is rejected at start. */
     public RabbitMqMessageListener(Connection connection,
             String serviceName,
             ConsumerRegistry consumerRegistry,
             MessageNameRegistry messageNameRegistry,
             PayloadDeserializer payloadDeserializer,
             MessageDispatcher dispatcher) {
+        this(connection, serviceName, consumerRegistry, messageNameRegistry, payloadDeserializer, dispatcher, null);
+    }
+
+    public RabbitMqMessageListener(Connection connection,
+            String serviceName,
+            ConsumerRegistry consumerRegistry,
+            MessageNameRegistry messageNameRegistry,
+            PayloadDeserializer payloadDeserializer,
+            MessageDispatcher dispatcher,
+            Inbox inbox) {
         Objects.requireNonNull(connection, "connection must not be null");
         Objects.requireNonNull(consumerRegistry, "consumerRegistry must not be null");
         Objects.requireNonNull(messageNameRegistry, "messageNameRegistry must not be null");
@@ -69,6 +84,7 @@ public class RabbitMqMessageListener {
         this.messageNameRegistry = messageNameRegistry;
         this.payloadDeserializer = payloadDeserializer;
         this.dispatcher = dispatcher;
+        this.inbox = inbox;
         this.serviceName = serviceName;
     }
 
@@ -77,6 +93,15 @@ public class RabbitMqMessageListener {
             return;
         }
         List<Channel> openedChannels = new ArrayList<>();
+        for (ConsumerDefinition definition : consumerRegistry.allConsumers()) {
+            if (definition.dedup() && inbox == null) {
+                throw new MessagingConfigurationException(
+                        "Consumer '" + definition.id() + "' declares dedup = true but no Inbox was"
+                                + " provided to the listener. Deduplication is a promise the listener"
+                                + " cannot keep without one -- construct the listener with an Inbox"
+                                + " (e.g. JdbcInbox over the consumer's database) or remove the flag.");
+            }
+        }
         for (ConsumerDefinition definition : consumerRegistry.allConsumers()) {
             String queueName = queueName(definition);
             try {
@@ -133,7 +158,18 @@ public class RabbitMqMessageListener {
                     delivery.getBody(),
                     definition.messageClass()
             );
-            dispatcher.dispatch(definition, message);
+            if (definition.dedup()) {
+                var messageId = UUID.fromString(delivery.getProperties().getMessageId());
+                boolean processed = inbox.processOnce(
+                        definition.id(), messageId, () -> dispatcher.dispatch(definition, message));
+                if (!processed) {
+                    logger.debug("Duplicate message {} for consumer '{}' skipped by the inbox",
+                            messageId, definition.id());
+                }
+            } else {
+                dispatcher.dispatch(definition, message);
+            }
+            // the duplicate is acked exactly like a processed message: consumed either way
             channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
         } catch (Exception processingFailure) {
             reject(channel, definition, delivery, processingFailure);
