@@ -8,8 +8,15 @@ public record ConsumerDefinition(
         Class<?> messageClass,     // what it consumes
         Object bean,               // target instance
         Method method,             // target method
-        int contextParameterIndex  // -1 for now; where MessageContext sits, later
+        int contextParameterIndex, // -1 for now; where MessageContext sits, later
+        boolean dedup              // opt-in inbox deduplication; false = handler declares itself idempotent
 ) {
+    /** Without the dedup flag: the consumer declares itself idempotent (the default). */
+    public ConsumerDefinition(String id, Class<?> messageClass, Object bean, Method method,
+            int contextParameterIndex) {
+        this(id, messageClass, bean, method, contextParameterIndex, false);
+    }
+
     public ConsumerDefinition {
         Objects.requireNonNull(id);
         Objects.requireNonNull(messageClass);
