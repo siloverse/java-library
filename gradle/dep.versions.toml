@@ -1,5 +1,5 @@
 [versions]
-siloverse-build = "1.7.0"
+siloverse-build = "1.8.0"
 
 [libraries]
 # Version managed by spring-boot-dependencies via the shared platform. Deliberately NOT in the
