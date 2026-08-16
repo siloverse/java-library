@@ -1,18 +1,16 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
 // Single source of the library version. Only the release task rewrites this
-// line: a bare x.y.z exists exactly on the release commit it tags; every other
-// commit carries the next -SNAPSHOT.
-val libraryVersion = "1.0.4-SNAPSHOT"
-
-// This project carries the version too: the release machinery below reads
-// everything from the project it sits on, never from script vals, so it stays
-// copy-ready for extraction to siloverse-build.
-version = libraryVersion
+// line: a bare x.y.z exists exactly on the release commit it tags; every
+// other commit carries the next -SNAPSHOT.
+version = "1.0.4-SNAPSHOT"
 
 subprojects {
     group = "io.github.siloverse"
-    version = libraryVersion
+    // NOT project.version: inside this block `project` is each subproject
+    // itself, so that reads as a self-assignment and every module would end
+    // up "unspecified". The modules' parent is this project.
+    version = parent!!.version
 }
 
 // ---------------------------------------------------------------------------
@@ -156,17 +154,18 @@ tasks.register("release") {
                     "Fix: release the next patch instead."
         }
 
-        // Anchored to line start and replace-FIRST: the pattern's own source
-        // code below this line must never be a match candidate — the 1.0.3
-        // release proved an unanchored replace-all rewrites the task itself.
-        val versionLinePattern = Regex("(?m)^val libraryVersion = \"[^\"]+\"")
+        // Safe to rewrite build source here: the pattern is anchored to line
+        // start and replaced once, and — unlike the val-based version line the
+        // 1.0.3 release tripped over — the text `version = "` appears at a
+        // line start nowhere else in this file, including this machinery.
+        val versionLinePattern = Regex("(?m)^version = \"[^\"]+\"")
         val originalContent = identityFile.readText()
         check(versionLinePattern.containsMatchIn(originalContent)) {
-            "Cannot find the libraryVersion line in $identityFilePath — the release task and the identity file have drifted."
+            "Cannot find the version line in $identityFilePath — the release task and the identity file have drifted."
         }
         fun writeVersion(newVersion: String) {
             identityFile.writeText(
-                identityFile.readText().replaceFirst(versionLinePattern, "val libraryVersion = \"$newVersion\"")
+                identityFile.readText().replaceFirst(versionLinePattern, "version = \"$newVersion\"")
             )
         }
 
