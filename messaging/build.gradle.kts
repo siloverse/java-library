@@ -1,23 +1,9 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
-plugins {
-    alias(local.plugins.axion.release)
-}
-
-// Version is derived from git, never written in a file: HEAD exactly on a
-// messaging-vX.Y.Z tag with a clean tree = bare X.Y.Z; anything else = next
-// patch + -SNAPSHOT. Releasing = tagging main and pushing the tag.
-scmVersion {
-    tag {
-        prefix.set("messaging-v")
-        versionSeparator.set("")
-    }
-    // No branch-name decoration: snapshots read the same from any branch, and
-    // CI's detached-HEAD tag checkout must derive the bare release version.
-    versionCreator("simple")
-}
-
-val libraryVersion = scmVersion.version
+// Single source of the library version. Only the release task rewrites this
+// line: a bare x.y.z exists exactly on the release commit it tags; every other
+// commit carries the next -SNAPSHOT.
+val libraryVersion = "1.0.3-SNAPSHOT"
 
 subprojects {
     group = "io.github.siloverse"
