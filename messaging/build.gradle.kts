@@ -4,4 +4,4 @@ plugins {
     alias(local.plugins.siloverse.platform) apply false
 }
 group = "io.github.siloverse"
-version = "1.0.7-SNAPSHOT"
+version = "1.0.7"
