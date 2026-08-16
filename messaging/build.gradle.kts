@@ -3,13 +3,13 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 // Single source of the library version. Only the release task rewrites this
 // line: a bare x.y.z exists exactly on the release commit it tags; every
 // other commit carries the next -SNAPSHOT.
+group = "io.github.siloverse"
 version = "1.0.4-SNAPSHOT"
 
 subprojects {
-    group = "io.github.siloverse"
-    // NOT project.version: inside this block `project` is each subproject
-    // itself, so that reads as a self-assignment and every module would end
-    // up "unspecified". The modules' parent is this project.
+    // Gradle does NOT inherit these: an unset version is "unspecified" and the
+    // default group leaks the container path (java-library.messaging).
+    group = parent!!.group
     version = parent!!.version
 }
 
