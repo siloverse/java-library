@@ -4,7 +4,7 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 // line: a bare x.y.z exists exactly on the release commit it tags; every
 // other commit carries the next -SNAPSHOT.
 group = "io.github.siloverse"
-version = "1.0.4"
+version = "1.0.5-SNAPSHOT"
 
 subprojects {
     // Gradle does NOT inherit these: an unset version is "unspecified" and the
