@@ -14,4 +14,4 @@ plugins {
 // here was extracted to siloverse-build (io.github.siloverse.library-release),
 // which also spreads group/version to the modules.
 group = "io.github.siloverse"
-version = "1.0.5-SNAPSHOT"
+version = "1.0.6"
