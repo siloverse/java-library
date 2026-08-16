@@ -1,6 +1,23 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
-val libraryVersion = "0.2.0-SNAPSHOT"
+plugins {
+    alias(local.plugins.axion.release)
+}
+
+// Version is derived from git, never written in a file: HEAD exactly on a
+// messaging-vX.Y.Z tag with a clean tree = bare X.Y.Z; anything else = next
+// patch + -SNAPSHOT. Releasing = tagging main and pushing the tag.
+scmVersion {
+    tag {
+        prefix.set("messaging-v")
+        versionSeparator.set("")
+    }
+    // No branch-name decoration: snapshots read the same from any branch, and
+    // CI's detached-HEAD tag checkout must derive the bare release version.
+    versionCreator("simple")
+}
+
+val libraryVersion = scmVersion.version
 
 subprojects {
     group = "io.github.siloverse"
@@ -26,7 +43,8 @@ val releaseGuard = tasks.register("releaseGuard") {
     doLast {
         check(!libraryVersion.endsWith("-SNAPSHOT")) {
             "Refusing remote publish: version is $libraryVersion — snapshots go to mavenLocal only. " +
-                    "Fix: release via a release PR (drop -SNAPSHOT), merge, tag, then publish from the tag checkout."
+                    "Fix: a bare version only derives from a release tag — tag the release commit on main " +
+                    "(git tag messaging-vX.Y.Z) and push the tag; CI publishes."
         }
         check(gitStatus.get().isBlank()) {
             "Refusing remote publish: working tree is dirty. " +
