@@ -4,8 +4,6 @@ plugins {
     // above already puts the whole conventions jar on the children's classpath,
     // and a child's versioned plugin request can only be satisfied if the
     // version is pinned somewhere on the parent chain.
-    alias(local.plugins.siloverse.jvm.library) apply false
-    alias(local.plugins.siloverse.platform) apply false
 }
 
 // Single source of the library version. Only the plugin's release task rewrites
