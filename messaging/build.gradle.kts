@@ -3,7 +3,7 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 // Single source of the library version. Only the release task rewrites this
 // line: a bare x.y.z exists exactly on the release commit it tags; every other
 // commit carries the next -SNAPSHOT.
-val libraryVersion = "1.0.3"
+val libraryVersion = "1.0.4-SNAPSHOT"
 
 subprojects {
     group = "io.github.siloverse"
@@ -139,12 +139,12 @@ tasks.register("release") {
         }
 
         val originalContent = identityFile.readText()
-        val versionLine = Regex("""val libraryVersion = "1.0.3"]+"""")
+        val versionLine = Regex("""val libraryVersion = "1.0.4-SNAPSHOT"]+"""")
         check(versionLine.containsMatchIn(originalContent)) {
             "Cannot find the libraryVersion line in ${identityFile.name} — the release task and the identity file have drifted."
         }
         fun writeVersion(newVersion: String) {
-            identityFile.writeText(identityFile.readText().replace(versionLine, """val libraryVersion = "1.0.3""""))
+            identityFile.writeText(identityFile.readText().replace(versionLine, """val libraryVersion = "1.0.4-SNAPSHOT""""))
         }
 
         writeVersion(version)
