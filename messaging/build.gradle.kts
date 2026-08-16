@@ -1,14 +1,34 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
 // Single source of the library version. Only the release task rewrites this
-// line: a bare x.y.z exists exactly on the release commit it tags; every other
-// commit carries the next -SNAPSHOT.
-val libraryVersion = "1.0.4-SNAPSHOT"
+// line: a bare x.y.z exists exactly on the release commit it tags; every
+// other commit carries the next -SNAPSHOT.
+group = "io.github.siloverse"
+version = "1.0.5-SNAPSHOT"
 
 subprojects {
-    group = "io.github.siloverse"
-    version = libraryVersion
+    // Gradle does NOT inherit these: an unset version is "unspecified" and the
+    // default group leaks the container path (java-library.messaging).
+    group = parent!!.group
+    version = parent!!.version
 }
+
+// ---------------------------------------------------------------------------
+// Release machinery — generic on purpose, destined for siloverse-build.
+// Everything derives from the project it sits on: library name = project.name
+// (tag prefix "<name>-v", commit wording), identity file = this build file,
+// publish scope = this directory, packages link = the origin remote. Nothing
+// below this line names "messaging".
+// ---------------------------------------------------------------------------
+
+val libraryName = project.name
+val tagPrefix = "$libraryName-v"
+val releaseTaskPath = "${project.path}:release"
+val currentVersion = version.toString()
+val libraryDir = projectDir
+val repoRoot = rootDir
+val identityFile = File(projectDir, "build.gradle.kts")
+val identityFilePath = identityFile.relativeTo(rootDir).path
 
 // No ancestor-of-main check: the release task publishes from a PR branch
 // BEFORE the merge — the accepted trade (recorded in CHECKPOINT.md) is that an
@@ -25,16 +45,16 @@ val releaseGuard = tasks.register("releaseGuard") {
     }.standardOutput.asText
 
     doLast {
-        check(!libraryVersion.endsWith("-SNAPSHOT")) {
-            "Refusing remote publish: version is $libraryVersion — snapshots go to mavenLocal only. " +
-                    "Fix: release through the release task — ./gradlew :messaging:release -PreleaseVersion=x.y.z"
+        check(!currentVersion.endsWith("-SNAPSHOT")) {
+            "Refusing remote publish: version is $currentVersion — snapshots go to mavenLocal only. " +
+                    "Fix: release through the release task — ./gradlew $releaseTaskPath -PreleaseVersion=x.y.z"
         }
         check(gitStatus.get().isBlank()) {
             "Refusing remote publish: working tree is dirty. " +
                     "Fix: commit or stash your changes — published artifacts must be reproducible from a commit."
         }
-        check(tagsAtHead.get().lines().contains("messaging-v$libraryVersion")) {
-            "Refusing remote publish: HEAD is not tagged messaging-v$libraryVersion. " +
+        check(tagsAtHead.get().lines().contains("$tagPrefix$currentVersion")) {
+            "Refusing remote publish: HEAD is not tagged $tagPrefix$currentVersion. " +
                     "Fix: don't publish by hand — the release task tags the release commit before it publishes."
         }
     }
@@ -48,7 +68,7 @@ subprojects {
 
 // The whole release, one command, run by a human from a PR branch:
 //
-//   ./gradlew :messaging:release -PreleaseVersion=x.y.z
+//   ./gradlew <library>:release -PreleaseVersion=x.y.z
 //
 // validate (clean tree · not main · rebased on refreshed main · version moves
 // forward) → set version → build → release commit + tag → publish → next
@@ -61,14 +81,10 @@ subprojects {
 // state releaseGuard enforces. Failures before the push revert everything
 // local; nothing leaves the machine until the final atomic push.
 tasks.register("release") {
-    description = "Releases messaging from a PR branch: validate, build, commit+tag, publish, bump to next snapshot, push."
+    description = "Releases $libraryName from a PR branch: validate, build, commit+tag, publish, bump to next snapshot, push."
 
     val requestedVersion = providers.gradleProperty("releaseVersion")
-    val repoRoot = rootDir
-    val gradlew = File(rootDir, "gradlew").absolutePath
-    val identityFile = File(projectDir, "build.gradle.kts")
-    val messagingDir = projectDir
-    val versionAtConfigTime = libraryVersion
+    val gradlew = File(repoRoot, "gradlew").absolutePath
 
     doLast {
         fun gitExitCode(vararg args: String): Int {
@@ -93,7 +109,7 @@ tasks.register("release") {
         fun parts(version: String): List<Int> = version.split(".").map { it.toInt() }
 
         val version = requestedVersion.orNull ?: error(
-            "Missing release version. Usage: ./gradlew :messaging:release -PreleaseVersion=x.y.z"
+            "Missing release version. Usage: ./gradlew $releaseTaskPath -PreleaseVersion=x.y.z"
         )
         check(Regex("""\d+\.\d+\.\d+""").matches(version)) {
             "Release version must be bare x.y.z (got \"$version\") — the task adds -SNAPSHOT to the next version itself."
@@ -108,11 +124,11 @@ tasks.register("release") {
         val branch = git("rev-parse", "--abbrev-ref", "HEAD")
         check(branch != "main") {
             "Refusing to release from main: releases ride a PR branch so the version commits go through review. " +
-                    "Fix: git switch -c release-v$version"
+                    "Fix: git switch -c release-$libraryName-$version"
         }
         check(branch != "HEAD") {
             "Refusing to release from a detached HEAD: the release commits must belong to a pushable branch. " +
-                    "Fix: git switch -c release-v$version"
+                    "Fix: git switch -c release-$libraryName-$version"
         }
 
         // Refresh the local main ref without leaving this branch, tags included
@@ -124,27 +140,33 @@ tasks.register("release") {
                     "Fix: git rebase main"
         }
 
-        val current = versionAtConfigTime.removeSuffix("-SNAPSHOT")
+        val current = currentVersion.removeSuffix("-SNAPSHOT")
         val currentParts = parts(current)
         val requestedParts = parts(version)
         check(compareValuesBy(requestedParts, currentParts, { it[0] }, { it[1] }, { it[2] }) >= 0) {
-            "Refusing to release $version: the build file already says $versionAtConfigTime — versions never move backwards. " +
+            "Refusing to release $version: the build file already says $currentVersion — versions never move backwards. " +
                     "Fix: pick $current or higher."
         }
 
-        val tag = "messaging-v$version"
+        val tag = "$tagPrefix$version"
         check(gitExitCode("rev-parse", "-q", "--verify", "refs/tags/$tag") != 0) {
             "Refusing to release $version: tag $tag already exists — released versions are immutable. " +
                     "Fix: release the next patch instead."
         }
 
+        // Safe to rewrite build source here: the pattern is anchored to line
+        // start and replaced once, and — unlike the val-based version line the
+        // 1.0.3 release tripped over — the text `version = "` appears at a
+        // line start nowhere else in this file, including this machinery.
+        val versionLinePattern = Regex("(?m)^version = \"[^\"]+\"")
         val originalContent = identityFile.readText()
-        val versionLine = Regex("""val libraryVersion = "1.0.4-SNAPSHOT"]+"""")
-        check(versionLine.containsMatchIn(originalContent)) {
-            "Cannot find the libraryVersion line in ${identityFile.name} — the release task and the identity file have drifted."
+        check(versionLinePattern.containsMatchIn(originalContent)) {
+            "Cannot find the version line in $identityFilePath — the release task and the identity file have drifted."
         }
         fun writeVersion(newVersion: String) {
-            identityFile.writeText(identityFile.readText().replace(versionLine, """val libraryVersion = "1.0.4-SNAPSHOT""""))
+            identityFile.writeText(
+                identityFile.readText().replaceFirst(versionLinePattern, "version = \"$newVersion\"")
+            )
         }
 
         writeVersion(version)
@@ -155,13 +177,16 @@ tasks.register("release") {
             throw GradleException("Build failed — version change reverted, nothing committed, nothing published.", failure)
         }
 
-        git("add", "messaging/build.gradle.kts")
-        git("commit", "-m", "Release messaging $version")
+        val originUrl = git("remote", "get-url", "origin")
+        val repoSlug = originUrl.removeSuffix(".git").substringAfter("github.com").trimStart(':', '/')
+
+        git("add", identityFilePath)
+        git("commit", "-m", "Release $libraryName $version")
         git("tag", "-a", tag, "-m",
-            "messaging $version\n\nArtifacts: https://github.com/siloverse/java-library/packages")
+            "$libraryName $version\n\nArtifacts: https://github.com/$repoSlug/packages")
 
         try {
-            gradle(messagingDir, "publish")
+            gradle(libraryDir, "publish")
         } catch (failure: Exception) {
             git("tag", "-d", tag)
             git("reset", "--hard", "HEAD~1")
@@ -175,14 +200,14 @@ tasks.register("release") {
 
         val nextVersion = requestedParts.let { (major, minor, patch) -> "$major.$minor.${patch + 1}" }
         writeVersion("$nextVersion-SNAPSHOT")
-        git("add", "messaging/build.gradle.kts")
-        git("commit", "-m", "Begin messaging $nextVersion development")
+        git("add", identityFilePath)
+        git("commit", "-m", "Begin $libraryName $nextVersion development")
 
         // Atomic: branch and tag land together or not at all.
         git("push", "--atomic", "origin", branch, "refs/tags/$tag")
 
         println()
-        println("Released messaging $version — artifacts published, tag $tag pushed with branch $branch.")
+        println("Released $libraryName $version — artifacts published, tag $tag pushed with branch $branch.")
         println("Next: open the PR and merge it WITH A MERGE COMMIT (a rebase-merge would orphan the tag).")
     }
 }
