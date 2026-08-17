@@ -1,5 +1,5 @@
 plugins {
-    alias(local.plugins.siloverse.platform)
+    id("io.github.siloverse.platform")
 }
 
 // Constraints reference every module via project(...) so a module silently

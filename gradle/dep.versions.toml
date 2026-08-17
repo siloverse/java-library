@@ -1,5 +1,5 @@
 [versions]
-siloverse-build = "1.9.0"
+siloverse-build = "1.10.0"
 
 [libraries]
 # Version managed by spring-boot-dependencies via the shared platform. Deliberately NOT in the
@@ -17,6 +17,4 @@ postgresql = { module = "org.postgresql:postgresql" }
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
 
 [plugins]
-siloverse-jvm-library = { id = "io.github.siloverse.jvm-library", version.ref = "siloverse-build" }
-siloverse-library-release = { id = "io.github.siloverse.library-release", version.ref = "siloverse-build" }
-siloverse-platform = { id = "io.github.siloverse.platform", version.ref = "siloverse-build" }
+siloverse-parent = { id = "io.github.siloverse.parent", version.ref = "siloverse-build" }
