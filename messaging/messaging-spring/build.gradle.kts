@@ -1,5 +1,5 @@
 plugins {
-    alias { local.plugins.siloverse.jvm.library }
+    id("io.github.siloverse.jvm-library")
 }
 
 dependencies {
