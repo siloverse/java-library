@@ -1,3 +1,5 @@
+import io.github.siloverse.build.SiloverseBuild
+
 pluginManagement {
     repositories {
         maven {
@@ -13,6 +15,9 @@ pluginManagement {
     }
 }
 
+plugins {
+    id("io.github.siloverse.parent") version "1.10.0" apply false
+}
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -28,14 +33,8 @@ dependencyResolutionManagement {
         mavenLocal()
     }
     versionCatalogs {
-        val siloverseBuildVersion =
-            Regex("""(?m)^\s*siloverse-build\s*=\s*"([^"]+)"""")
-                .find(file("gradle/dep.versions.toml").readText())
-                ?.groupValues
-                ?.get(1)
-                ?: error("Missing 'siloverse-build' in gradle/dep.versions.toml")
         create("libs") {
-            from("io.github.siloverse.gradle:version-catalog:$siloverseBuildVersion")
+            from("io.github.siloverse.gradle:version-catalog:${SiloverseBuild.version}")
         }
         create("local") {
             from(files("gradle/dep.versions.toml"))
@@ -45,7 +44,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "java-library"
 
-include("messaging:messaging-bom")
-include("messaging:messaging-core")
-include("messaging:messaging-rabbitmq")
-include("messaging:messaging-spring")
+include(
+    "messaging:messaging-bom",
+    "messaging:messaging-core",
+    "messaging:messaging-rabbitmq",
+    "messaging:messaging-spring",
+)
