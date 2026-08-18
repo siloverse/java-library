@@ -1,6 +1,3 @@
-[versions]
-siloverse-build = "1.10.0"
-
 [libraries]
 # Version managed by spring-boot-dependencies via the shared platform. Deliberately NOT in the
 # shared catalog: services must reach the broker through the buses, never the client directly.
@@ -15,6 +12,3 @@ spring-tx = { module = "org.springframework:spring-tx" }
 assertj-core = { module = "org.assertj:assertj-core" }
 postgresql = { module = "org.postgresql:postgresql" }
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
-
-[plugins]
-siloverse-parent = { id = "io.github.siloverse.parent", version.ref = "siloverse-build" }
