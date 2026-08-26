@@ -10,6 +10,17 @@ _Last updated: 2026-08-17. This document is the arbiter: if Claude asserts somet
 
 **Git state:** `main` = release-cycle machinery landed via PRs #6–#8 (identity move + siloverse-build 1.8.0 + CI workflow + wrapper · `messaging-bom` · release guard); `messaging-v0.1.0` released (PR #9); tag-triggered release workflow (PR #11), axion tag-derived versioning (PR #13); `messaging-v1.0.0`/`1.0.1`/`1.0.2` released via the tag-push runbook. Then the PROCESS REVERSAL (2026-08-16 evening, user's deliberate call — see Release process v3): local release task landed (PR #17), first task release `messaging-v1.0.3` (PR #18), machinery genericized + `messaging-v1.0.4` released inside the same PR (#19). Repo at `1.0.5-SNAPSHOT`, all four artifacts on GHP at `1.0.4`, both new tags reachable from main via merge commits. No branch open. Next act: extract machinery to siloverse-build (see Then / next).
 
+## First-consumer findings (2026-08-26, Phase 5 dogfooding — six defects in one day)
+
+The silos became the library's first real consumers; every finding below was hit live:
+
+1. **Demanded a Jackson-2 ObjectMapper bean from Boot 4 hosts** (which manage Jackson 3) → RESOLVED: library migrated to `tools.jackson` (platform-baseline decision: internal library binds to Boot 4; cross-version support was YAGNI).
+2. **No vhost in `RabbitMqConnectionSettings`** → RESOLVED: `vHost` added; connector sets it.
+3. **Vhost refusal masqueraded as broker-unreachable** (530 arrives as IOException, caught by the generic branch) → error messages must enumerate real causes.
+4. Test code accidentally imported `org.testcontainers.shaded.*` Jackson during the migration — anything `shaded`/`internal` is someone else's private copy; never import it.
+5. **Unconditional role activation:** the outbox relay ran in consumer-only hosts and polled a table that rightly doesn't exist there. Rule: a capability that requires host schema must be opt-in so config and migration travel together. (Activation gating still to implement — currently silenced because notification-silo's migration ships both tables.)
+6. **Unqualified table names only resolve via `search_path`** (2026-08-26, found by the golden-path test in a hermetic container, where no search_path exists). Prod "worked" only because the VM roles still carry a pinned `search_path` that the route-B redesign removed from Puppet but never reverted on the live DB — drift, working by accident. **Resolution (Awais's call, revised same day):** a configurable-table `OutboxSettings` was built, then REVERTED as needless complexity; instead each host declares `?currentSchema=<silo_schema>` on its JDBC URL (prod yml AND Testcontainers via `withUrlParam` — test mirrors the production mechanism). Trade-off accepted with eyes open: this re-introduces connection ambience for the messaging tables (softening route B's "explicit everywhere"), but it is app-declared, versioned, and one mechanism for all unqualified SQL. Follow-up DONE (2026-08-26): `ALTER ROLE … RESET search_path` executed on both silo roles (each role reset itself — no superuser needed); zero role-level settings remain; registration verified end-to-end before AND after the reset. Fresh connections now get vanilla `"$user", public` — currentSchema on the URL is provably the sole mechanism.
+
 ## Locked decisions (do not reopen)
 
 - Two unrelated markers: `Event` (0..many, pub-sub), `Command` (exactly 1, fire-forget). NO shared Message supertype. `Request<R>` designed then removed (YAGNI; blueprint in git history).
