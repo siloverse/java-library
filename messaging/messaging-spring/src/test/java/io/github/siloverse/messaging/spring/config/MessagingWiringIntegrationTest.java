@@ -1,6 +1,5 @@
 package io.github.siloverse.messaging.spring.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Connection;
 import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.api.TransactionAwareAsynchronousBus;
@@ -32,6 +31,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
 import java.io.IOException;

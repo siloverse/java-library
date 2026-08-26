@@ -1,8 +1,5 @@
 package io.github.siloverse.messaging.spring.outbox;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +9,9 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.core.exc.JacksonIOException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -79,8 +79,8 @@ class JdbcOutboxWriterTest {
                     new TypeReference<>() {
                     }
             );
-        } catch (JsonProcessingException ex) {
-            throw new UncheckedIOException(ex);
+        } catch (JacksonIOException ex) {
+            throw new UncheckedIOException(ex.getCause());
         }
     }
 

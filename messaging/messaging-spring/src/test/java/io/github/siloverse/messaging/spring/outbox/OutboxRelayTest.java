@@ -1,6 +1,5 @@
 package io.github.siloverse.messaging.spring.outbox;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
@@ -10,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

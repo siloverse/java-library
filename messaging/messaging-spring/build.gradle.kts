@@ -6,7 +6,7 @@ dependencies {
     api(project(":messaging:messaging-core"))
 
     api(local.slf4j.api)
-    api(libs.jackson.databind)
+    api(local.jackson.databind)
 
     implementation(local.spring.aop)
     implementation(local.spring.beans)

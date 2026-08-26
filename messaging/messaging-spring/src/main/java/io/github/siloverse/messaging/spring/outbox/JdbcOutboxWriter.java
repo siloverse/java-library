@@ -2,12 +2,12 @@ package io.github.siloverse.messaging.spring.outbox;
 
 import java.util.Objects;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.OutboxWriter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Appends envelopes to the {@code messaging_outbox} table (DDL shipped as
@@ -61,7 +61,7 @@ public class JdbcOutboxWriter implements OutboxWriter {
         try {
 
             return objectMapper.writeValueAsString(envelope.headers());
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new MessagingException(
                     String.format(
                             "Message header serialization failed for [message-id:%s], message-type:%s",

@@ -12,3 +12,4 @@ spring-tx = { module = "org.springframework:spring-tx" }
 assertj-core = { module = "org.assertj:assertj-core" }
 postgresql = { module = "org.postgresql:postgresql" }
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }

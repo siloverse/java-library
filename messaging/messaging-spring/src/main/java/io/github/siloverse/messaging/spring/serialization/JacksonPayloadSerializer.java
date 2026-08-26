@@ -2,10 +2,10 @@ package io.github.siloverse.messaging.spring.serialization;
 
 import java.util.Objects;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.PayloadSerializer;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 public class JacksonPayloadSerializer implements PayloadSerializer {
 
@@ -20,7 +20,7 @@ public class JacksonPayloadSerializer implements PayloadSerializer {
     public byte[] serialize(Object message) {
         try {
             return objectMapper.writeValueAsBytes(message);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             // never include the payload itself: it is business data and ends up in logs
             throw new MessagingException(
                     "Could not serialize message of type " + message.getClass().getName()

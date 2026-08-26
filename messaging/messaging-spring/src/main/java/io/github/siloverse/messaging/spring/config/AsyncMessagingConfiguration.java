@@ -1,6 +1,5 @@
 package io.github.siloverse.messaging.spring.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.api.AsynchronousBus;
 import io.github.siloverse.messaging.core.api.TransactionAwareAsynchronousBus;
 import io.github.siloverse.messaging.core.dispatch.DefaultAsynchronousBus;
@@ -18,6 +17,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * The asynchronous chapter: buses, outbox, relay and lifecycle. Register ALONGSIDE

@@ -16,7 +16,7 @@ pluginManagement {
 }
 
 plugins {
-    id("io.github.siloverse.parent") version "1.10.1" apply false
+    id("io.github.siloverse.parent") version "1.10.2" apply false
 }
 
 dependencyResolutionManagement {

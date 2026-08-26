@@ -7,13 +7,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
 import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Moves pending rows from {@code messaging_outbox} to the broker: polls {@code published_at IS NULL} in id order,
@@ -80,7 +80,7 @@ public class OutboxRelay {
     private Map<String, String> parseHeaders(String headersJson, UUID messageId) {
         try {
             return objectMapper.readValue(headersJson, HEADERS_TYPE);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new MessagingException(
                     "Message header deserialization failed for [message-id:" + messageId + "]",
                     exception
