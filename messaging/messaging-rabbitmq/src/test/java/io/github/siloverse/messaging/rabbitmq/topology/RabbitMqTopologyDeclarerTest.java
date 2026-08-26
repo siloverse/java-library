@@ -33,8 +33,13 @@ class RabbitMqTopologyDeclarerTest {
     @BeforeAll
     static void startBrokerAndConnect() {
         rabbit.start();
-        connection = RabbitMqConnector.connect(new RabbitMqConnectionSettings(
-                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword()));
+        connection = RabbitMqConnector.connect(
+                new RabbitMqConnectionSettings(
+                        rabbit.getHost(),
+                        rabbit.getAmqpPort(),
+                        rabbit.getAdminUsername(),
+                        rabbit.getAdminPassword(),
+                        "/"));
     }
 
     @AfterAll

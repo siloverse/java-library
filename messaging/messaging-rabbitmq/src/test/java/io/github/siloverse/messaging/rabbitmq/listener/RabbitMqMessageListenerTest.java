@@ -49,7 +49,7 @@ class RabbitMqMessageListenerTest {
     static void startBrokerAndConnect() {
         rabbit.start();
         var settings = new RabbitMqConnectionSettings(
-                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword());
+                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword(), "/");
         publishConnection = RabbitMqConnector.connect(settings);
         consumeConnection = RabbitMqConnector.connect(settings);
     }

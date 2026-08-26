@@ -193,7 +193,7 @@ class MessagingWiringIntegrationTest {
         @Bean
         RabbitMqConnectionSettings rabbitSettings() {
             return new RabbitMqConnectionSettings(rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(),
-                    rabbit.getAdminPassword());
+                    rabbit.getAdminPassword(), "/");
         }
 
         @Bean(destroyMethod = "close")
