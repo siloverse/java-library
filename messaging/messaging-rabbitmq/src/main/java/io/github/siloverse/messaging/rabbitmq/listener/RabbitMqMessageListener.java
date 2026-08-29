@@ -2,7 +2,9 @@ package io.github.siloverse.messaging.rabbitmq.listener;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -161,13 +163,20 @@ public class RabbitMqMessageListener {
             if (definition.dedup()) {
                 var messageId = UUID.fromString(delivery.getProperties().getMessageId());
                 boolean processed = inbox.processOnce(
-                        definition.id(), messageId, () -> dispatcher.dispatch(definition, message));
+                        definition.id(), messageId,
+                        () -> dispatcher.dispatch(definition,
+                                stringHeaders(delivery.getProperties().getHeaders()),
+                                message));
                 if (!processed) {
                     logger.debug("Duplicate message {} for consumer '{}' skipped by the inbox",
                             messageId, definition.id());
                 }
             } else {
-                dispatcher.dispatch(definition, message);
+                dispatcher.dispatch(
+                        definition,
+                        stringHeaders(delivery.getProperties().getHeaders()),
+                        message
+                );
             }
             // the duplicate is acked exactly like a processed message: consumed either way
             channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
@@ -240,5 +249,14 @@ public class RabbitMqMessageListener {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private static Map<String, String> stringHeaders(Map<String, Object> amqpHeaders) {
+        if (amqpHeaders == null) {                 // ← real case: a message with NO headers
+            return Map.of();
+        }
+        var headers = new HashMap<String, String>();
+        amqpHeaders.forEach((key, value) -> headers.put(key, String.valueOf(value)));
+        return headers;
     }
 }

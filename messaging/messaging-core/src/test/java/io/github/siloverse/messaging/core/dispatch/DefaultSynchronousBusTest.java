@@ -26,7 +26,7 @@ class DefaultSynchronousBusTest {
     void setUp() {
         registry = new ConsumerRegistry();
         handlers = new Handlers();
-        bus = new DefaultSynchronousBus(registry, new MessageDispatcher());
+        bus = new DefaultSynchronousBus(registry, new DefaultMessageDispatcher());
     }
 
     private ConsumerDefinition def(String id, Class<?> msg, String methodName) throws Exception {

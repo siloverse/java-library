@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class MessageDispatcherTest {
 
-    private final MessageDispatcher dispatcher = new MessageDispatcher();
+    private final MessageDispatcher dispatcher = new DefaultMessageDispatcher();
     private final RecordingConsumer consumer = new RecordingConsumer();
 
     @Test

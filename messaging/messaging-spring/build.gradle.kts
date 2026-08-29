@@ -8,6 +8,7 @@ dependencies {
     api(local.slf4j.api)
     api(local.jackson.databind)
 
+    implementation(local.micrometer.tracing)
     implementation(local.spring.aop)
     implementation(local.spring.beans)
     implementation(local.spring.context)

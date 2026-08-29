@@ -6,6 +6,7 @@ import io.github.siloverse.messaging.core.consumer.Consumer;
 import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
 import io.github.siloverse.messaging.core.consumer.ConsumerRegistry;
 import io.github.siloverse.messaging.core.consumer.Inbox;
+import io.github.siloverse.messaging.core.dispatch.DefaultMessageDispatcher;
 import io.github.siloverse.messaging.core.dispatch.MessageDispatcher;
 import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
@@ -35,8 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * The consuming side's executable spec: dispatch typed events to @Consumer methods, ack on
- * success, one immediate retry on first failure, park in the DLQ on the second.
+ * The consuming side's executable spec: dispatch typed events to @Consumer methods, ack on success, one immediate retry
+ * on first failure, park in the DLQ on the second.
  */
 class RabbitMqMessageListenerTest {
 
@@ -67,7 +68,8 @@ class RabbitMqMessageListenerTest {
         new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
 
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher());
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.order-confirmed", "42"));
@@ -95,7 +97,8 @@ class RabbitMqMessageListenerTest {
         new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
 
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher());
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.payment-recorded", "7"));
@@ -119,7 +122,8 @@ class RabbitMqMessageListenerTest {
         new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
 
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher());
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.entry-recorded", "13"));
@@ -143,7 +147,7 @@ class RabbitMqMessageListenerTest {
         new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
 
         var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
-                new IntPayloadDeserializer(), new MessageDispatcher(), new InMemoryInbox());
+                new IntPayloadDeserializer(), new DefaultMessageDispatcher(), new InMemoryInbox());
         listener.start();
         try {
             // same messageId twice = the wire-level duplicate the relay's crash story promises
@@ -171,7 +175,7 @@ class RabbitMqMessageListenerTest {
         var consumers = registryFor("order-dedup-unwired", OrderConfirmed.class, worker, "onOrderConfirmed", true);
 
         var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
-                new IntPayloadDeserializer(), new MessageDispatcher());
+                new IntPayloadDeserializer(), new DefaultMessageDispatcher());
 
         assertThatThrownBy(listener::start)
                 .as("dedup = true is a promise the listener cannot keep without an Inbox --"

@@ -1,5 +1,7 @@
 package io.github.siloverse.messaging.core.dispatch;
 
+import java.util.Map;
+
 import io.github.siloverse.messaging.core.api.Command;
 import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.api.SynchronousBus;
@@ -22,13 +24,13 @@ public class DefaultSynchronousBus implements SynchronousBus {
     @Override
     public void publish(Event event) {
         for (ConsumerDefinition def : registry.eventConsumersFor(event.getClass())) {
-            messageDispatcher.dispatch(def, event);
+            messageDispatcher.dispatch(def, Map.of(), event);
         }
     }
 
     @Override
     public void send(Command command) {
         var def = registry.commandConsumerFor(command.getClass());
-        messageDispatcher.dispatch(def, command);
+        messageDispatcher.dispatch(def, Map.of(), command);
     }
 }

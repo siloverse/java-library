@@ -5,6 +5,8 @@ import io.github.siloverse.messaging.core.api.TransactionAwareAsynchronousBus;
 import io.github.siloverse.messaging.core.dispatch.DefaultAsynchronousBus;
 import io.github.siloverse.messaging.core.dispatch.DefaultTransactionAwareAsynchronousBus;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
+import io.github.siloverse.messaging.core.transport.EnvelopeFactory;
+import io.github.siloverse.messaging.core.transport.EnvelopeHeadersContributor;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
 import io.github.siloverse.messaging.core.transport.OutboxWriter;
 import io.github.siloverse.messaging.core.transport.PayloadSerializer;
@@ -13,6 +15,9 @@ import io.github.siloverse.messaging.spring.outbox.JdbcOutboxWriter;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelay;
 import io.github.siloverse.messaging.spring.outbox.OutboxRelaySettings;
 import io.github.siloverse.messaging.spring.topology.TopologyDeclaration;
+import io.github.siloverse.messaging.spring.tracing.TracingHeadersContributor;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,22 +25,37 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * The asynchronous chapter: buses, outbox, relay and lifecycle. Register ALONGSIDE
- * {@link MessagingConfiguration} -- and provide the application's side of the contract:
- * {@link MessageTransport}, {@link PayloadSerializer}, a composed {@link MessageNameRegistry},
- * {@link JdbcTemplate}, {@link ObjectMapper}, and (broker-specific) a
+ * The asynchronous chapter: buses, outbox, relay and lifecycle. Register ALONGSIDE {@link MessagingConfiguration} --
+ * and provide the application's side of the contract: {@link MessageTransport}, {@link PayloadSerializer}, a composed
+ * {@link MessageNameRegistry}, {@link JdbcTemplate}, {@link ObjectMapper}, and (broker-specific) a
  * {@link TopologyDeclaration} bean. Sync-only applications simply do not register this class.
  */
 @Configuration
 public class AsyncMessagingConfiguration {
 
     @Bean
-    AsynchronousBus asynchronousBus(
+    EnvelopeHeadersContributor envelopeHeadersContributor(
+            Tracer tracer,
+            Propagator propagator
+    ) {
+        return new TracingHeadersContributor(tracer, propagator);
+    }
+
+    @Bean
+    EnvelopeFactory envelopFactory(
             MessageNameRegistry messageNameRegistry,
-            MessageTransport messageTransport,
+            EnvelopeHeadersContributor envelopeHeadersContributor,
             PayloadSerializer payloadSerializer
     ) {
-        return new DefaultAsynchronousBus(messageNameRegistry, messageTransport, payloadSerializer);
+        return new EnvelopeFactory(messageNameRegistry, envelopeHeadersContributor, payloadSerializer);
+    }
+
+    @Bean
+    AsynchronousBus asynchronousBus(
+            EnvelopeFactory envelopeFactory,
+            MessageTransport messageTransport
+    ) {
+        return new DefaultAsynchronousBus(envelopeFactory, messageTransport);
     }
 
     @Bean
@@ -57,11 +77,10 @@ public class AsyncMessagingConfiguration {
 
     @Bean
     TransactionAwareAsynchronousBus transactionAwareAsynchronousBus(
-            MessageNameRegistry messageNameRegistry,
-            OutboxWriter outboxWriter,
-            PayloadSerializer payloadSerializer
+            EnvelopeFactory envelopeFactory,
+            OutboxWriter outboxWriter
     ) {
-        return new DefaultTransactionAwareAsynchronousBus(messageNameRegistry, outboxWriter, payloadSerializer);
+        return new DefaultTransactionAwareAsynchronousBus(envelopeFactory, outboxWriter);
     }
 
     @Bean
