@@ -33,12 +33,20 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration
 public class AsyncMessagingConfiguration {
 
+    // decorate with tracing when the context can trace, contribute nothing when it can't
+    // (a context without an observability stack still publishes valid envelopes)
     @Bean
     EnvelopeHeadersContributor envelopeHeadersContributor(
-            Tracer tracer,
-            Propagator propagator
+            ObjectProvider<Tracer> tracer,
+            ObjectProvider<Propagator> propagator
     ) {
-        return new TracingHeadersContributor(tracer, propagator);
+        Tracer availableTracer = tracer.getIfAvailable();
+        Propagator availablePropagator = propagator.getIfAvailable();
+        if (availableTracer == null || availablePropagator == null) {
+            return headers -> {
+            };
+        }
+        return new TracingHeadersContributor(availableTracer, availablePropagator);
     }
 
     @Bean

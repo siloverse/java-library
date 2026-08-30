@@ -11,6 +11,7 @@ import io.github.siloverse.messaging.spring.consumer.SpringConsumerScanner;
 import io.github.siloverse.messaging.spring.tracing.TracingMessageDispatcher;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.ObjectMapper;
@@ -46,18 +47,22 @@ public class MessagingConfiguration {
         return new ConsumerScanningInitializer(springConsumerScanner, consumerRegistry);
     }
 
+    // the sync chapter must not demand an observability stack: decorate with tracing when the
+    // context can trace, dispatch plainly when it can't (a sync-only application, a bare test context)
     @Bean
     MessageDispatcher messageDispatcher(
-            ObjectMapper objectMapper,
-            Tracer tracer,
-            Propagator propagator
+            ObjectProvider<ObjectMapper> objectMapper,
+            ObjectProvider<Tracer> tracer,
+            ObjectProvider<Propagator> propagator
     ) {
-        return new TracingMessageDispatcher(
-                objectMapper,
-                tracer,
-                propagator,
-                new DefaultMessageDispatcher()
-        );
+        var dispatcher = new DefaultMessageDispatcher();
+        ObjectMapper mapper = objectMapper.getIfAvailable();
+        Tracer availableTracer = tracer.getIfAvailable();
+        Propagator availablePropagator = propagator.getIfAvailable();
+        if (mapper == null || availableTracer == null || availablePropagator == null) {
+            return dispatcher;
+        }
+        return new TracingMessageDispatcher(mapper, availableTracer, availablePropagator, dispatcher);
     }
 
     @Bean

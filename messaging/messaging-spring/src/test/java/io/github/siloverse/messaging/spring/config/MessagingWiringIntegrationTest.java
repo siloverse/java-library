@@ -4,12 +4,17 @@ import com.rabbitmq.client.Connection;
 import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.api.TransactionAwareAsynchronousBus;
 import io.github.siloverse.messaging.core.consumer.Consumer;
+import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
 import io.github.siloverse.messaging.core.transport.PayloadSerializer;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnectionSettings;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnector;
+import io.github.siloverse.messaging.rabbitmq.retry.FailedDeliveryHandler;
+import io.github.siloverse.messaging.rabbitmq.retry.RetryPolicy;
+import io.github.siloverse.messaging.rabbitmq.retry.RetrySettings;
+import io.github.siloverse.messaging.rabbitmq.retry.RetryingFailedDeliveryHandler;
 import io.github.siloverse.messaging.rabbitmq.topology.RabbitMqTopologyDeclarer;
 import io.github.siloverse.messaging.rabbitmq.listener.RabbitMqMessageListener;
 import io.github.siloverse.messaging.rabbitmq.transport.RabbitMqMessageTransport;
@@ -38,10 +43,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -217,21 +224,38 @@ class MessagingWiringIntegrationTest {
         }
 
         @Bean
+        RetrySettings retrySettings(io.github.siloverse.messaging.core.consumer.ConsumerRegistry consumers) {
+            return RetrySettings.DEFAULT;
+        }
+
+        @Bean
         TopologyDeclaration rabbitTopology(
                 Connection connection,
                 io.github.siloverse.messaging.core.consumer.ConsumerRegistry consumers,
-                MessageNameRegistry names
+                MessageNameRegistry names,
+                RetrySettings retrySettings
         ) {
             var declarer = new RabbitMqTopologyDeclarer(connection);
             return () -> {
                 declarer.declarePublisherTopology(names);
-                declarer.declareConsumerTopology("billing-silo", consumers, names);
+                declarer.declareConsumerTopology("billing-silo", consumers, names, retrySettings);
             };
         }
 
         @Bean
         OutboxRelaySettings outboxRelaySettings() {
             return new OutboxRelaySettings(Duration.ofMillis(100));
+        }
+
+        @Bean
+        FailedDeliveryHandler failedDeliveryHandler(
+                RetrySettings retrySettings
+
+        ) {
+            return new RetryingFailedDeliveryHandler(
+                    retrySettings,
+                    "billing-silo"
+            );
         }
 
         @Bean
@@ -242,7 +266,8 @@ class MessagingWiringIntegrationTest {
                 ObjectMapper objectMapper,
                 io.github.siloverse.messaging.core.dispatch.MessageDispatcher dispatcher,
                 JdbcTemplate jdbcTemplate,
-                TransactionTemplate transactionTemplate
+                TransactionTemplate transactionTemplate,
+                FailedDeliveryHandler failedDeliveryHandler
         ) {
             // the consume connection is the listening machinery's internal detail, not a
             // context bean: opened on start, closed on stop, never shared with publishing
@@ -255,7 +280,7 @@ class MessagingWiringIntegrationTest {
                     consumeConnection = RabbitMqConnector.connect(settings);
                     listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names,
                             new JacksonPayloadDeserializer(objectMapper), dispatcher,
-                            new JdbcInbox(jdbcTemplate, transactionTemplate));
+                            new JdbcInbox(jdbcTemplate, transactionTemplate), failedDeliveryHandler);
                     listener.start();
                 }
 

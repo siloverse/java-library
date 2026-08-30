@@ -28,7 +28,7 @@ import org.springframework.util.ClassUtils;
  */
 public class ConsumerScanningInitializer implements BeanFactoryPostProcessor, SmartInitializingSingleton {
 
-    private static final Logger logger = LoggerFactory.getLogger(ConsumerScanningInitializer.class);
+    private static final Logger log = LoggerFactory.getLogger(ConsumerScanningInitializer.class);
 
     private ConfigurableListableBeanFactory beanFactory;
     private final SpringConsumerScanner scanner;
@@ -83,7 +83,7 @@ public class ConsumerScanningInitializer implements BeanFactoryPostProcessor, Sm
 
             for (var definition : definitions) {
                 registry.register(definition);
-                logger.info("Registered consumer '{}' -> {}", definition.id(),
+                log.info("Registered consumer '{}' -> {}", definition.id(),
                         definition.method().getDeclaringClass().getSimpleName()
                                 + "#" + definition.method().getName());
                 consumerCount++;
@@ -92,7 +92,7 @@ public class ConsumerScanningInitializer implements BeanFactoryPostProcessor, Sm
         }
         registry.freeze();
 
-        logger.info("Messaging initialized: {} consumer(s) registered from {} bean(s); registry frozen",
+        log.info("Messaging initialized: {} consumer(s) registered from {} bean(s); registry frozen",
                 consumerCount, scannedBeans);
     }
 
