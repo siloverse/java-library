@@ -10,6 +10,13 @@ _Last updated: 2026-08-30. This document is the arbiter: if Claude asserts somet
 
 **Git state:** `main` = release-cycle machinery landed via PRs #6–#8 (identity move + siloverse-build 1.8.0 + CI workflow + wrapper · `messaging-bom` · release guard); `messaging-v0.1.0` released (PR #9); tag-triggered release workflow (PR #11), axion tag-derived versioning (PR #13); `messaging-v1.0.0`/`1.0.1`/`1.0.2` released via the tag-push runbook. Then the PROCESS REVERSAL (2026-08-16 evening, user's deliberate call — see Release process v3): local release task landed (PR #17), first task release `messaging-v1.0.3` (PR #18), machinery genericized + `messaging-v1.0.4` released inside the same PR (#19). Repo at `1.0.5-SNAPSHOT`, all four artifacts on GHP at `1.0.4`, both new tags reachable from main via merge commits. No branch open. Next act: extract machinery to siloverse-build (see Then / next).
 
+## State at merge to main (2026-10-11)
+
+- Branch `fix-build` (2026-08-19 to 2026-09-03) merged: build-config fix, Jackson 2 to 3 migration, vhost in the RabbitMQ settings, trace context through the broker via envelope headers (`EnvelopeHeadersContributor` SPI, `TracingMessageDispatcher`), retry tiers v1 with `@RabbitPolicy`, the query-chapter goal, siloverse-build 1.11.1 adoption.
+- **Released:** messaging `1.0.9` is the newest version on GitHub Packages (tag `messaging-v1.0.9`).
+- **Pending release: messaging `1.0.11`.** Everything after 1.0.9 (tracing contributor SPI, dispatcher interface + tracing decorator, dlq/retry/main topology, `@RabbitPolicy`, `MessageDispatcher` widening) exists only as `1.0.11-SNAPSHOT` in mavenLocal (`1.0.10-SNAPSHOT` was never released either). user-silo and notification-silo pin that snapshot, which is why their CI is red: the runners have no mavenLocal. Order: `./gradlew :messaging:release -PreleaseVersion=1.0.11` on a PR branch here, merge with a merge commit, then bump both silos to `1.0.11` and remove their `mavenLocal()` scaffolding.
+- **Next:** the pagination library (Kotlin; offset, slice, keyset; `pagination-core` + `pagination-spring` + `pagination-bom`, same shape as messaging). See "Then / next".
+
 ## First-consumer findings (2026-08-26, Phase 5 dogfooding — six defects in one day)
 
 The silos became the library's first real consumers; every finding below was hit live:
