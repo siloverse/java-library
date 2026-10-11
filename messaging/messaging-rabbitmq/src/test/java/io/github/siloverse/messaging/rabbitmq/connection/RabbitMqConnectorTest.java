@@ -27,7 +27,7 @@ class RabbitMqConnectorTest {
     @Test
     void connectsAndTheConnectionRecoversItself() throws Exception {
         var settings = new RabbitMqConnectionSettings(
-                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword());
+                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword(), "/");
 
         try (var connection = RabbitMqConnector.connect(settings)) {
             assertThat(connection.isOpen()).isTrue();
@@ -41,7 +41,7 @@ class RabbitMqConnectorTest {
     @Test
     void wrongCredentialsAreAConfigurationError() {
         var settings = new RabbitMqConnectionSettings(
-                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), "wrong-password");
+                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), "wrong-password", "/");
 
         assertThatThrownBy(() -> RabbitMqConnector.connect(settings))
                 .as("the broker rejected the credentials -- the fix is configuration, not operations")
@@ -54,7 +54,7 @@ class RabbitMqConnectorTest {
     @Test
     void unreachableBrokerIsAnEnvironmentalError() {
         // port 1 is reserved and nothing listens on it: connection refused, fast
-        var settings = new RabbitMqConnectionSettings("localhost", 1, "app", "password");
+        var settings = new RabbitMqConnectionSettings("localhost", 1, "app", "password", "/");
 
         assertThatThrownBy(() -> RabbitMqConnector.connect(settings))
                 .as("nobody is listening -- the fix is operational, so the base MessagingException,"

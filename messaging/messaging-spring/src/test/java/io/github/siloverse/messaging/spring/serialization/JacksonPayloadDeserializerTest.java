@@ -1,8 +1,8 @@
 package io.github.siloverse.messaging.spring.serialization;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 

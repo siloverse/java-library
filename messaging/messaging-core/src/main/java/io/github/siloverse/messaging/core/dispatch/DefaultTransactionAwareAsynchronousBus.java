@@ -15,14 +15,13 @@ import io.github.siloverse.messaging.core.transport.PayloadSerializer;
  * Publishes by appending to the outbox inside the caller's transaction.
  *
  * <p>Delivery contract: a message published in a transaction that COMMITS is delivered
- * at least once -- the relay republishes ambiguous rows after a crash, so duplicates are
- * possible (identified by {@link Envelope#messageId()}) and consumers must be idempotent.
- * A transaction that ROLLS BACK delivers nothing: the outbox row rolls back with the
- * business data.
+ * at least once -- the relay republishes ambiguous rows after a crash, so duplicates are possible (identified by
+ * {@link Envelope#messageId()}) and consumers must be idempotent. A transaction that ROLLS BACK delivers nothing: the
+ * outbox row rolls back with the business data.
  *
  * <p>This bus never manages transactions itself. The {@link OutboxWriter} implementation
- * inherits whatever transaction the calling thread is in; without one, the append is
- * effectively a direct write with no rollback safety.
+ * inherits whatever transaction the calling thread is in; without one, the append is effectively a direct write with no
+ * rollback safety.
  */
 public class DefaultTransactionAwareAsynchronousBus implements TransactionAwareAsynchronousBus {
 
@@ -30,13 +29,13 @@ public class DefaultTransactionAwareAsynchronousBus implements TransactionAwareA
     private final OutboxWriter outboxWriter;
 
     public DefaultTransactionAwareAsynchronousBus(
-            MessageNameRegistry messageNameRegistry,
-            OutboxWriter outboxWriter,
-            PayloadSerializer payloadSerializer
+            EnvelopeFactory envelopeFactory,
+            OutboxWriter outboxWriter
     ) {
+        Objects.requireNonNull(envelopeFactory, "envelopeFactory must not be null");
         Objects.requireNonNull(outboxWriter, "outboxWriter must not be null");
 
-        this.envelopeFactory = new EnvelopeFactory(messageNameRegistry, payloadSerializer);
+        this.envelopeFactory = envelopeFactory;
         this.outboxWriter = outboxWriter;
     }
 

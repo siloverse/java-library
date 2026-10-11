@@ -6,13 +6,17 @@ import io.github.siloverse.messaging.core.fixtures.FakePayloadSerializer;
 import io.github.siloverse.messaging.core.fixtures.OrderConfirmed;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
+import io.github.siloverse.messaging.core.transport.EnvelopeFactory;
+import io.github.siloverse.messaging.core.transport.EnvelopeHeadersContributor;
 import io.github.siloverse.messaging.core.transport.MessageTransport;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -22,16 +26,17 @@ class DefaultAsynchronousBusTest {
     FakePayloadSerializer serializer;
     RecordingTransport transport;
     DefaultAsynchronousBus bus;
+    EnvelopeFactory envelopeFactory;
+    EnvelopeHeadersContributor envelopeHeadersContributor = new FakeEnvelopeHeadersContributor();
 
     @BeforeEach
     void setup() {
-        registry = MessageNameRegistry.builder()
-                .register(OrderConfirmed.class, "order-silo.order-confirmed")
-                .register(ConfirmOrder.class, "order-silo.confirm-order")
-                .freeze();
+        registry = MessageNameRegistry.builder().register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .register(ConfirmOrder.class, "order-silo.confirm-order").freeze();
         serializer = new FakePayloadSerializer();
         transport = new RecordingTransport();
-        bus = new DefaultAsynchronousBus(registry, transport, serializer);
+        envelopeFactory = new EnvelopeFactory(registry, envelopeHeadersContributor, serializer);
+        bus = new DefaultAsynchronousBus(envelopeFactory, transport);
     }
 
     @Test
@@ -64,12 +69,12 @@ class DefaultAsynchronousBusTest {
 
     @Test
     void testUnregisteredMessageThrowsAndSendsNothing() {
-        var unregisteredOnlyBus = new DefaultAsynchronousBus(
-                MessageNameRegistry.builder().freeze(), transport, serializer);
+        var envelopeFactory =
+                new EnvelopeFactory(MessageNameRegistry.builder().freeze(), envelopeHeadersContributor, serializer);
+        var unregisteredOnlyBus = new DefaultAsynchronousBus(envelopeFactory, transport);
 
-        assertThatThrownBy(() -> unregisteredOnlyBus.publish(new OrderConfirmed("42")))
-                .isInstanceOf(MessagingConfigurationException.class)
-                .hasMessageContaining(OrderConfirmed.class.getName());
+        assertThatThrownBy(() -> unregisteredOnlyBus.publish(new OrderConfirmed("42"))).isInstanceOf(
+                MessagingConfigurationException.class).hasMessageContaining(OrderConfirmed.class.getName());
 
         // failing must not leak a half-built message to the wire
         assertThat(transport.sent).isEmpty();
@@ -81,18 +86,28 @@ class DefaultAsynchronousBusTest {
         bus.publish(new OrderConfirmed("42"));
 
         assertThat(transport.sent).hasSize(2);
-        assertThat(transport.sent.getFirst().messageId())
-                .isNotEqualTo(transport.sent.getLast().messageId());
+        assertThat(transport.sent.getFirst().messageId()).isNotEqualTo(transport.sent.getLast().messageId());
     }
 
     @Test
     void testConstructorRejectsNullDependencies() {
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(null, transport, serializer))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(registry, null, serializer))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultAsynchronousBus(registry, transport, null))
-                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(
+                () -> new DefaultAsynchronousBus(new EnvelopeFactory(null, envelopeHeadersContributor, serializer),
+                        transport)).isInstanceOf(
+                NullPointerException.class);
+        assertThatThrownBy(
+                () -> new DefaultAsynchronousBus(new EnvelopeFactory(registry, envelopeHeadersContributor, serializer),
+                        null)).isInstanceOf(
+                NullPointerException.class);
+        assertThatThrownBy(
+                () -> new DefaultAsynchronousBus(new EnvelopeFactory(registry, null, serializer),
+                        transport)).isInstanceOf(
+                NullPointerException.class);
+        assertThatThrownBy(
+                () -> new DefaultAsynchronousBus(new EnvelopeFactory(registry, envelopeHeadersContributor, null),
+                        transport)).isInstanceOf(
+                NullPointerException.class);
     }
 
     static class RecordingTransport implements MessageTransport {
@@ -102,6 +117,13 @@ class DefaultAsynchronousBusTest {
         @Override
         public void send(Envelope envelope) {
             sent.add(envelope);
+        }
+    }
+
+    static class FakeEnvelopeHeadersContributor implements EnvelopeHeadersContributor {
+
+        @Override
+        public void contribute(Map<String, String> headers) {
         }
     }
 }

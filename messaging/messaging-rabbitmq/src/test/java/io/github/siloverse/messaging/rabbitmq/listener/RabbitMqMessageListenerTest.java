@@ -6,13 +6,17 @@ import io.github.siloverse.messaging.core.consumer.Consumer;
 import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
 import io.github.siloverse.messaging.core.consumer.ConsumerRegistry;
 import io.github.siloverse.messaging.core.consumer.Inbox;
-import io.github.siloverse.messaging.core.dispatch.MessageDispatcher;
+import io.github.siloverse.messaging.core.dispatch.DefaultMessageDispatcher;
 import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
 import io.github.siloverse.messaging.core.transport.PayloadDeserializer;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnectionSettings;
 import io.github.siloverse.messaging.rabbitmq.connection.RabbitMqConnector;
+import io.github.siloverse.messaging.rabbitmq.consumer.RabbitPolicy;
+import io.github.siloverse.messaging.rabbitmq.retry.RetryPolicy;
+import io.github.siloverse.messaging.rabbitmq.retry.RetrySettings;
+import io.github.siloverse.messaging.rabbitmq.retry.RetryingFailedDeliveryHandler;
 import io.github.siloverse.messaging.rabbitmq.topology.RabbitMqTopologyDeclarer;
 import io.github.siloverse.messaging.rabbitmq.transport.RabbitMqMessageTransport;
 import org.junit.jupiter.api.AfterAll;
@@ -23,6 +27,7 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -31,12 +36,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * The consuming side's executable spec: dispatch typed events to @Consumer methods, ack on
- * success, one immediate retry on first failure, park in the DLQ on the second.
+ * The consuming side's executable spec: dispatch typed events to @Consumer methods, ack on success, one immediate retry
+ * on first failure, bounded delayed retries through the {@code .retry} queue after that, park in the DLQ when attempts
+ * are exhausted.
  */
 class RabbitMqMessageListenerTest {
 
@@ -49,7 +56,7 @@ class RabbitMqMessageListenerTest {
     static void startBrokerAndConnect() {
         rabbit.start();
         var settings = new RabbitMqConnectionSettings(
-                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword());
+                rabbit.getHost(), rabbit.getAmqpPort(), rabbit.getAdminUsername(), rabbit.getAdminPassword(), "/");
         publishConnection = RabbitMqConnector.connect(settings);
         consumeConnection = RabbitMqConnector.connect(settings);
     }
@@ -63,11 +70,14 @@ class RabbitMqMessageListenerTest {
     @Test
     void deliversTypedEventToTheConsumerAndAcks() throws Exception {
         var worker = new RecordingWorker();
+        var serviceName = "billing-silo";
         var consumers = registryFor("order-recorder", OrderConfirmed.class, worker, "onOrderConfirmed");
-        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
-
+        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology(
+                serviceName, consumers, names(), RetrySettings.DEFAULT
+        );
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, serviceName, consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher(), new RetryingFailedDeliveryHandler(RetrySettings.DEFAULT, serviceName));
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.order-confirmed", "42"));
@@ -90,12 +100,15 @@ class RabbitMqMessageListenerTest {
 
     @Test
     void firstFailureGetsOneImmediateRetry() throws Exception {
+        var serviceName = "billing-silo";
         var worker = new FlakyWorker();
         var consumers = registryFor("order-flaky", PaymentRecorded.class, worker, "onPaymentRecorded");
-        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
+        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology(serviceName, consumers, names(),
+                RetrySettings.DEFAULT);
 
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, serviceName, consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher(), new RetryingFailedDeliveryHandler(RetrySettings.DEFAULT, serviceName));
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.payment-recorded", "7"));
@@ -113,24 +126,32 @@ class RabbitMqMessageListenerTest {
     }
 
     @Test
-    void poisonMessageParksInTheDlqAfterExactlyTwoAttempts() throws Exception {
+    void poisonMessageParksInTheDlqAfterAttemptsAreExhausted() throws Exception {
+        var serviceName = "billing-silo";
         var worker = new PoisonWorker();
         var consumers = registryFor("order-poison", EntryRecorded.class, worker, "onEntryRecorded");
-        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
+        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology(serviceName, consumers, names(),
+                RetrySettings.DEFAULT);
 
         var listener = new RabbitMqMessageListener(
-                consumeConnection, "billing-silo", consumers, names(), new IntPayloadDeserializer(), new MessageDispatcher());
+                consumeConnection, serviceName, consumers, names(), new IntPayloadDeserializer(),
+                new DefaultMessageDispatcher(), new RetryingFailedDeliveryHandler(RetrySettings.DEFAULT, serviceName));
         listener.start();
         try {
             new RabbitMqMessageTransport(publishConnection).send(envelope("order-silo.entry-recorded", "13"));
 
-            var parked = awaitParked("billing-silo-order-poison.dlq", Duration.ofSeconds(10));
+            var parked = awaitParked("billing-silo-order-poison.dlq", Duration.ofSeconds(11));
             assertThat(parked.getProps().getHeaders())
                     .as("the broker's dead-letter audit trail must ride along")
                     .containsKey("x-death");
+            assertThat(parked.getProps().getHeaders())
+                    .as("the handler records WHY the message was parked, for the human who finds it")
+                    .containsKey("x-parking-cause");
+            // maxAttempts counts broker deliveries (x-death); each costs one extra in-process
+            // invocation via the immediate requeue retry, so 2 attempts = 4 invocations
             assertThat(worker.attempts.get())
-                    .as("a deterministic failure costs exactly two invocations -- never a loop")
-                    .isEqualTo(2);
+                    .as("a deterministic failure costs a bounded number of invocations -- never a loop")
+                    .isEqualTo(4);
         } finally {
             listener.stop();
         }
@@ -138,12 +159,16 @@ class RabbitMqMessageListenerTest {
 
     @Test
     void dedupConsumerProcessesADuplicateDeliveryExactlyOnce() throws Exception {
+        var serviceName = "billing-silo";
         var worker = new RecordingDedupWorker();
         var consumers = registryFor("order-dedup", OrderConfirmed.class, worker, "onOrderConfirmed", true);
-        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology("billing-silo", consumers, names());
+        new RabbitMqTopologyDeclarer(publishConnection).declareConsumerTopology(
+                serviceName, consumers, names(), RetrySettings.DEFAULT
+        );
 
-        var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
-                new IntPayloadDeserializer(), new MessageDispatcher(), new InMemoryInbox());
+        var listener = new RabbitMqMessageListener(consumeConnection, serviceName, consumers, names(),
+                new IntPayloadDeserializer(), new DefaultMessageDispatcher(), new InMemoryInbox()
+                , new RetryingFailedDeliveryHandler(RetrySettings.DEFAULT, serviceName));
         listener.start();
         try {
             // same messageId twice = the wire-level duplicate the relay's crash story promises
@@ -167,11 +192,12 @@ class RabbitMqMessageListenerTest {
 
     @Test
     void dedupConsumerWithoutAnInboxFailsStartNamingTheConsumer() {
+        var serviceName = "billing-silo";
         var worker = new RecordingDedupWorker();
         var consumers = registryFor("order-dedup-unwired", OrderConfirmed.class, worker, "onOrderConfirmed", true);
-
-        var listener = new RabbitMqMessageListener(consumeConnection, "billing-silo", consumers, names(),
-                new IntPayloadDeserializer(), new MessageDispatcher());
+        var listener = new RabbitMqMessageListener(consumeConnection, serviceName, consumers, names(),
+                new IntPayloadDeserializer(), new DefaultMessageDispatcher(),
+                new RetryingFailedDeliveryHandler(RetrySettings.DEFAULT, serviceName));
 
         assertThatThrownBy(listener::start)
                 .as("dedup = true is a promise the listener cannot keep without an Inbox --"
@@ -241,6 +267,7 @@ class RabbitMqMessageListenerTest {
         final AtomicInteger attempts = new AtomicInteger();
 
         @Consumer(id = "order-poison")
+        @RabbitPolicy(maxAttempts = 2, delayMillis = 500)
         void onEntryRecorded(EntryRecorded event) {
             attempts.incrementAndGet();
             throw new IllegalStateException("deterministic failure, poison message");

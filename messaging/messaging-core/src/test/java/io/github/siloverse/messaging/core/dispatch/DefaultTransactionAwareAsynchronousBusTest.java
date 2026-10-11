@@ -6,6 +6,8 @@ import io.github.siloverse.messaging.core.fixtures.FakePayloadSerializer;
 import io.github.siloverse.messaging.core.fixtures.OrderConfirmed;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 import io.github.siloverse.messaging.core.transport.Envelope;
+import io.github.siloverse.messaging.core.transport.EnvelopeFactory;
+import io.github.siloverse.messaging.core.transport.EnvelopeHeadersContributor;
 import io.github.siloverse.messaging.core.transport.OutboxWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -22,16 +25,17 @@ class DefaultTransactionAwareAsynchronousBusTest {
     FakePayloadSerializer serializer;
     RecordingOutbox outbox;
     DefaultTransactionAwareAsynchronousBus bus;
+    EnvelopeFactory envelopeFactory;
+    EnvelopeHeadersContributor envelopeHeadersContributor = new FakeEnvelopeHeadersContributor();
 
     @BeforeEach
     void setup() {
-        registry = MessageNameRegistry.builder()
-                .register(OrderConfirmed.class, "order-silo.order-confirmed")
-                .register(ConfirmOrder.class, "order-silo.confirm-order")
-                .freeze();
+        registry = MessageNameRegistry.builder().register(OrderConfirmed.class, "order-silo.order-confirmed")
+                .register(ConfirmOrder.class, "order-silo.confirm-order").freeze();
         serializer = new FakePayloadSerializer();
         outbox = new RecordingOutbox();
-        bus = new DefaultTransactionAwareAsynchronousBus(registry, outbox, serializer);
+        envelopeFactory = new EnvelopeFactory(registry, envelopeHeadersContributor, serializer);
+        bus = new DefaultTransactionAwareAsynchronousBus(envelopeFactory, outbox);
     }
 
     @Test
@@ -65,11 +69,11 @@ class DefaultTransactionAwareAsynchronousBusTest {
     @Test
     void testUnregisteredMessageThrowsAndAppendsNothing() {
         var emptyRegistryBus = new DefaultTransactionAwareAsynchronousBus(
-                MessageNameRegistry.builder().freeze(), outbox, serializer);
+                new EnvelopeFactory(MessageNameRegistry.builder().freeze(), envelopeHeadersContributor, serializer),
+                outbox);
 
-        assertThatThrownBy(() -> emptyRegistryBus.publish(new OrderConfirmed("42")))
-                .isInstanceOf(MessagingConfigurationException.class)
-                .hasMessageContaining(OrderConfirmed.class.getName());
+        assertThatThrownBy(() -> emptyRegistryBus.publish(new OrderConfirmed("42"))).isInstanceOf(
+                MessagingConfigurationException.class).hasMessageContaining(OrderConfirmed.class.getName());
 
         // failing must not leave a half-built row for the relay to find
         assertThat(outbox.appended).isEmpty();
@@ -81,18 +85,24 @@ class DefaultTransactionAwareAsynchronousBusTest {
         bus.publish(new OrderConfirmed("42"));
 
         assertThat(outbox.appended).hasSize(2);
-        assertThat(outbox.appended.getFirst().messageId())
-                .isNotEqualTo(outbox.appended.getLast().messageId());
+        assertThat(outbox.appended.getFirst().messageId()).isNotEqualTo(outbox.appended.getLast().messageId());
     }
 
     @Test
     void testConstructorRejectsNullDependencies() {
-        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(null, outbox, serializer))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(registry, null, serializer))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(registry, outbox, null))
-                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(
+                new EnvelopeFactory(null, envelopeHeadersContributor, serializer), outbox)).isInstanceOf(
+                NullPointerException.class);
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(
+                new EnvelopeFactory(registry, envelopeHeadersContributor, serializer), null)).isInstanceOf(
+                NullPointerException.class);
+        assertThatThrownBy(
+                () -> new DefaultTransactionAwareAsynchronousBus(new EnvelopeFactory(registry, null, serializer),
+                        outbox)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new DefaultTransactionAwareAsynchronousBus(
+                new EnvelopeFactory(registry, envelopeHeadersContributor, null), outbox)).isInstanceOf(
+                NullPointerException.class);
     }
 
     static class RecordingOutbox implements OutboxWriter {
@@ -102,6 +112,13 @@ class DefaultTransactionAwareAsynchronousBusTest {
         @Override
         public void append(Envelope envelope) {
             appended.add(envelope);
+        }
+    }
+
+    static class FakeEnvelopeHeadersContributor implements EnvelopeHeadersContributor {
+
+        @Override
+        public void contribute(Map<String, String> headers) {
         }
     }
 }

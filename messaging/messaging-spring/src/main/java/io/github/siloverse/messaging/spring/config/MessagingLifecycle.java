@@ -28,7 +28,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
  */
 public class MessagingLifecycle implements SmartLifecycle {
 
-    private static final Logger logger = LoggerFactory.getLogger(MessagingLifecycle.class);
+    private static final Logger log = LoggerFactory.getLogger(MessagingLifecycle.class);
 
     private final OutboxRelay relay;
     private final OutboxRelaySettings settings;
@@ -68,7 +68,7 @@ public class MessagingLifecycle implements SmartLifecycle {
         scheduler.scheduleWithFixedDelay(this::relayTick, settings.pollInterval());
 
         running = true;
-        logger.info("Messaging started: topology declared ({} declaration(s)), {} listener(s) consuming,"
+        log.info("Messaging started: topology declared ({} declaration(s)), {} listener(s) consuming,"
                         + " outbox relay polling every {}",
                 topologyDeclarations.size(), messageListeners.size(), settings.pollInterval());
     }
@@ -83,7 +83,7 @@ public class MessagingLifecycle implements SmartLifecycle {
         messageListeners.forEach(MessageListener::stop);
         scheduler.shutdown();
         scheduler = null;
-        logger.info("Messaging stopped: listeners stopped, outbox relay cancelled");
+        log.info("Messaging stopped: listeners stopped, outbox relay cancelled");
     }
 
     @Override
@@ -97,7 +97,7 @@ public class MessagingLifecycle implements SmartLifecycle {
         } catch (RuntimeException e) {
             // the relay's retry mechanism IS the next tick: rows it failed to ship are
             // still unstamped and will be picked up again
-            logger.warn("Outbox relay tick failed; unstamped rows will be retried next tick", e);
+            log.warn("Outbox relay tick failed; unstamped rows will be retried next tick", e);
         }
     }
 }

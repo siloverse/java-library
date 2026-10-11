@@ -2,6 +2,7 @@ package io.github.siloverse.messaging.core.dispatch;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.Map;
 
 import io.github.siloverse.messaging.core.api.Event;
 import io.github.siloverse.messaging.core.consumer.ConsumerDefinition;
@@ -13,14 +14,14 @@ import static org.assertj.core.api.Assertions.*;
 
 class MessageDispatcherTest {
 
-    private final MessageDispatcher dispatcher = new MessageDispatcher();
+    private final MessageDispatcher dispatcher = new DefaultMessageDispatcher();
     private final RecordingConsumer consumer = new RecordingConsumer();
 
     @Test
     void invokesConsumerWithSameMessageInstance() throws NoSuchMethodException {
         var message = new TestEvent("hello");
 
-        dispatcher.dispatch(accessibleDefinition("consume"), message);
+        dispatcher.dispatch(accessibleDefinition("consume"), Map.of(), message);
 
         assertThat(consumer.received).isSameAs(message);
     }
@@ -31,7 +32,7 @@ class MessageDispatcherTest {
         consumer.failure = expected;
 
         assertThatThrownBy(
-                () -> dispatcher.dispatch(accessibleDefinition("throwRuntime"), new TestEvent("hello")))
+                () -> dispatcher.dispatch(accessibleDefinition("throwRuntime"), Map.of(), new TestEvent("hello")))
                 .isSameAs(expected);
     }
 
@@ -41,7 +42,7 @@ class MessageDispatcherTest {
         consumer.failure = expected;
 
         assertThatThrownBy(
-                () -> dispatcher.dispatch(accessibleDefinition("throwError"), new TestEvent("hello")))
+                () -> dispatcher.dispatch(accessibleDefinition("throwError"), Map.of(), new TestEvent("hello")))
                 .isSameAs(expected);
     }
 
@@ -51,7 +52,7 @@ class MessageDispatcherTest {
         consumer.failure = expected;
 
         assertThatThrownBy(
-                () -> dispatcher.dispatch(accessibleDefinition("throwChecked"), new TestEvent("hello")))
+                () -> dispatcher.dispatch(accessibleDefinition("throwChecked"), Map.of(), new TestEvent("hello")))
                 .isInstanceOf(ConsumerInvocationException.class)
                 .hasMessage("Consumer threw a checked exception")
                 .hasCause(expected);
@@ -62,7 +63,7 @@ class MessageDispatcherTest {
         var method = RecordingConsumer.class.getDeclaredMethod("privateConsume", TestEvent.class);
         var definition = definition("private-consumer", method);
 
-        assertThatThrownBy(() -> dispatcher.dispatch(definition, new TestEvent("hello")))
+        assertThatThrownBy(() -> dispatcher.dispatch(definition, Map.of(), new TestEvent("hello")))
                 .isInstanceOf(MessagingException.class)
                 .hasMessage("Cannot access consumer method private-consumer -- registration should have made it "
                         + "accessible. This is a scanner bug.")
@@ -73,7 +74,7 @@ class MessageDispatcherTest {
     void propagatesInvalidInvocationArguments() throws NoSuchMethodException {
         var definition = accessibleDefinition("consume");
 
-        assertThatThrownBy(() -> dispatcher.dispatch(definition, "wrong message type"))
+        assertThatThrownBy(() -> dispatcher.dispatch(definition, Map.of(), "wrong message type"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

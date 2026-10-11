@@ -1,11 +1,11 @@
 package io.github.siloverse.messaging.spring.serialization;
 
-import java.io.IOException;
 import java.util.Objects;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.transport.PayloadDeserializer;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 public class JacksonPayloadDeserializer implements PayloadDeserializer {
     private final ObjectMapper objectMapper;
@@ -19,7 +19,7 @@ public class JacksonPayloadDeserializer implements PayloadDeserializer {
     public <T> T deserialize(byte[] payload, Class<T> type) {
         try {
             return objectMapper.readValue(payload, type);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             // never include the payload bytes: they are business data and end up in logs
             throw new MessagingException(
                     "Could not deserialize payload into " + type.getName()

@@ -15,14 +15,11 @@ public class DefaultAsynchronousBus implements AsynchronousBus {
     private final EnvelopeFactory envelopeFactory;
     private final MessageTransport messageTransport;
 
-    public DefaultAsynchronousBus(
-            MessageNameRegistry messageNameRegistry,
-            MessageTransport messageTransport,
-            PayloadSerializer payloadSerializer
-    ) {
+    public DefaultAsynchronousBus(EnvelopeFactory envelopeFactory, MessageTransport messageTransport) {
+        Objects.requireNonNull(envelopeFactory, "envelopeFactory must not be null");
         Objects.requireNonNull(messageTransport, "messageTransport must not be null");
 
-        this.envelopeFactory = new EnvelopeFactory(messageNameRegistry, payloadSerializer);
+        this.envelopeFactory = envelopeFactory;
         this.messageTransport = messageTransport;
     }
 

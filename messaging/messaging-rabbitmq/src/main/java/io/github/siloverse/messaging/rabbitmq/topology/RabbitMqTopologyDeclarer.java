@@ -14,6 +14,8 @@ import io.github.siloverse.messaging.core.consumer.ConsumerRegistry;
 import io.github.siloverse.messaging.core.error.MessagingConfigurationException;
 import io.github.siloverse.messaging.core.error.MessagingException;
 import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
+import io.github.siloverse.messaging.rabbitmq.retry.RetryPolicy;
+import io.github.siloverse.messaging.rabbitmq.retry.RetrySettings;
 
 /**
  * Declares broker topology from the frozen registries at startup.
@@ -24,14 +26,16 @@ import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
  * consumer queue to the exchange. Declarations are idempotent -- both sides declaring the same exchange, and restarts
  * re-declaring everything, are no-ops by AMQP contract.
  *
- * <p>Dead-letter wiring makes the listener's give-up path loss-proof: a delivery nacked
- * without requeue is routed (via the default exchange, no extra exchange objects) into the
- * {@code .dlq} parking queue, keeping its identity plus the broker's {@code x-death} audit
- * headers, where it waits for a human -- parked, never dropped. The parking queue is
- * terminal (no dead-letter arguments of its own, so no loops) and is always declared BEFORE
- * the queue that points at it: no state may exist, however briefly, in which a nack could
- * route to a missing queue and vanish. Queue arguments are immutable on the broker --
- * changing them against live queues fails with 406 (see failure tiers below).
+ * <p>Retry wiring makes the listener's failure path bounded and loss-proof: the main queue
+ * dead-letters (via the default exchange, no extra exchange objects) into {@code .retry}, whose per-queue TTL -- the
+ * consumer's retry delay -- expires deliveries back to the main queue. Attempts are counted from the broker's
+ * {@code x-death} headers; when they are exhausted, the
+ * {@link io.github.siloverse.messaging.rabbitmq.retry.FailedDeliveryHandler} republishes the delivery to the terminal
+ * {@code .dlq} (no dead-letter arguments of its own, so no loops) and acks the original. Declaration order is dlq,
+ * retry, then main: a pointer must not target a missing queue -- with one safe exception, the just-created retry queue
+ * pointing at a main queue declared one statement later, which cannot misfire because a newborn queue is empty and
+ * nothing can expire out of it. Queue arguments are immutable on the broker -- changing them against live queues fails
+ * with 406 (see failure tiers below).
  *
  * <p>Failure tiers: an exchange already declared with different settings (406
  * precondition-failed) or a consumed class missing from the name registry is a {@link MessagingConfigurationException};
@@ -40,6 +44,8 @@ import io.github.siloverse.messaging.core.naming.MessageNameRegistry;
 public class RabbitMqTopologyDeclarer {
 
     private static final String X_DEAD_LETTER_EXCHANGE = "x-dead-letter-exchange";
+
+    private static final String X_MESSAGE_TTL = "x-message-ttl";
 
     private static final String X_DEAD_LETTER_ROUTING_KEY = "x-dead-letter-routing-key";
 
@@ -61,10 +67,16 @@ public class RabbitMqTopologyDeclarer {
         }
     }
 
-    public void declareConsumerTopology(String serviceName, ConsumerRegistry consumers, MessageNameRegistry names) {
+    public void declareConsumerTopology(
+            String serviceName,
+            ConsumerRegistry consumers,
+            MessageNameRegistry names,
+            RetrySettings retrySettings
+    ) {
         Objects.requireNonNull(serviceName, "serviceName must not be null");
         Objects.requireNonNull(consumers, "consumers must not be null");
         Objects.requireNonNull(names, "names must not be null");
+        Objects.requireNonNull(retrySettings, "retrySettings must not be null");
         if (serviceName.isBlank()) {
             throw new IllegalArgumentException("serviceName must not be blank -- it prefixes every queue name");
         }
@@ -72,11 +84,13 @@ public class RabbitMqTopologyDeclarer {
         try (Channel channel = openChannel()) {
             for (var consumer : consumers.allConsumers()) {
                 String wireName = names.nameOf(consumer.messageClass());
-                String queue = serviceName + "-" + consumer.id();
-
+                String queueName = QueueNames.mainQueueName(serviceName, consumer);
+                String retryQueueName = QueueNames.retryQueueName(serviceName, consumer);
+                String dlqName = QueueNames.dlqName(serviceName, consumer);
+                RetryPolicy policy = retrySettings.policyFor(consumer);
                 declareExchange(channel, wireName);
-                declareQueue(channel, queue);
-                bind(channel, queue, wireName);
+                declareQueue(channel, policy, queueName, retryQueueName, dlqName);
+                bind(channel, queueName, wireName);
             }
         } catch (IOException | TimeoutException e) {
             throw closingFailure(e);
@@ -102,12 +116,19 @@ public class RabbitMqTopologyDeclarer {
         }
     }
 
-    private static void declareQueue(Channel channel, String queue) {
-        String deadLetterQueue = queue + ".dlq";
-        declareOneQueue(channel, deadLetterQueue, null);          // parking lot first: the work
-        declareOneQueue(channel, queue, Map.of(                   // queue must never point at a
-                X_DEAD_LETTER_EXCHANGE, "",                       // missing dlq
-                X_DEAD_LETTER_ROUTING_KEY, deadLetterQueue));
+    private static void declareQueue(Channel channel, RetryPolicy policy, String queueName, String retryQueueName,
+            String dlqName) {
+
+        declareOneQueue(channel, dlqName, null);
+
+        declareOneQueue(channel, retryQueueName, Map.of(
+                X_DEAD_LETTER_EXCHANGE, "",
+                X_MESSAGE_TTL, policy.delay().toMillis(),
+                X_DEAD_LETTER_ROUTING_KEY, queueName));
+
+        declareOneQueue(channel, queueName, Map.of(
+                X_DEAD_LETTER_EXCHANGE, "",
+                X_DEAD_LETTER_ROUTING_KEY, retryQueueName));
     }
 
     private static void declareOneQueue(Channel channel, String name, Map<String, Object> arguments) {

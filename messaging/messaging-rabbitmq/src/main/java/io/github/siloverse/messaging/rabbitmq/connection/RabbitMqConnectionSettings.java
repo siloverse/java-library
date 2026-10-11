@@ -6,7 +6,8 @@ public record RabbitMqConnectionSettings(
         String host,
         int port,
         String username,
-        String password
+        String password,
+        String vHost
 ) {
     public RabbitMqConnectionSettings {
         Objects.requireNonNull(host, "host must not be null");

@@ -14,8 +14,8 @@ import io.github.siloverse.messaging.core.error.MessagingException;
  * Opens broker connections from {@link RabbitMqConnectionSettings}.
  *
  * <p>The caller owns the returned connection and must close it on shutdown. Automatic
- * connection and topology recovery are library policy: after a network failure the
- * connection heals itself; sends fail during the outage and work again after it.
+ * connection and topology recovery are library policy: after a network failure the connection heals itself; sends fail
+ * during the outage and work again after it.
  */
 public final class RabbitMqConnector {
 
@@ -28,6 +28,7 @@ public final class RabbitMqConnector {
         var factory = new ConnectionFactory();
         factory.setHost(settings.host());
         factory.setPort(settings.port());
+        factory.setVirtualHost(settings.vHost());
         factory.setUsername(settings.username());
         factory.setPassword(settings.password());
         factory.setAutomaticRecoveryEnabled(true);
