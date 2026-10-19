@@ -5,8 +5,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.postgresql.PostgreSQLContainer
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -14,78 +12,47 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * The proving ground: a real Postgres, hand-written SQL, no JPA. Each test shows one thing
- * that an in-memory list or H2 would hide. The adapter in step 3 is built on what these prove.
- *
- * Data: 5000 listings, ten per second, so every `created_at` value is shared by ten rows.
- * Each listing has 0 to 3 photos. Index on `(created_at, id)`, the same columns as the sort.
+ * The proving ground, step 1: a real Postgres, hand-written SQL, no JPA. Each test shows one
+ * thing that an in-memory list or H2 would hide. Data in [ListingFixture].
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class KeysetSqlProvingGroundTest {
 
-    private val postgres = PostgreSQLContainer("postgres:17-alpine")
     private lateinit var jdbc: JdbcTemplate
-
-    data class Row(val id: UUID, val createdAt: OffsetDateTime)
-
-    private val rowMapper = { rs: java.sql.ResultSet, _: Int ->
-        Row(rs.getObject("id", UUID::class.java), rs.getObject("created_at", OffsetDateTime::class.java))
-    }
 
     @BeforeAll
     fun startDatabaseAndSeed() {
-        postgres.start()
-        jdbc = JdbcTemplate(DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password))
-        jdbc.execute("CREATE TABLE listing (id uuid PRIMARY KEY, title text NOT NULL, created_at timestamptz NOT NULL)")
-        jdbc.execute("CREATE TABLE listing_photo (id bigserial PRIMARY KEY, listing_id uuid NOT NULL REFERENCES listing (id), url text NOT NULL)")
-        jdbc.execute("CREATE INDEX listing_created_at_id ON listing (created_at, id)")
-        jdbc.execute(
-            """
-            INSERT INTO listing (id, title, created_at)
-            SELECT gen_random_uuid(), 'listing ' || g, timestamptz '2026-01-01 00:00:00+00' + (g / 10) * interval '1 second'
-            FROM generate_series(1, 5000) g
-            """,
-        )
-        jdbc.execute(
-            """
-            INSERT INTO listing_photo (listing_id, url)
-            SELECT l.id, 'photo-' || p
-            FROM listing l, generate_series(1, 3) p
-            WHERE p <= abs(hashtext(l.id::text)) % 4
-            """,
-        )
-        jdbc.execute("ANALYZE listing")
-        jdbc.execute("ANALYZE listing_photo")
+        jdbc = JdbcTemplate(ListingFixture.dataSource(ListingFixture.start()))
     }
 
     private val totalOrder: List<UUID>
-        get() = jdbc.query("SELECT id, created_at FROM listing ORDER BY created_at, id", rowMapper).map { it.id }
+        get() = ListingFixture.totalOrder(jdbc)
 
     /** WHERE (created_at, id) > (?, ?) — the row-value comparison, with the tie breaker. */
-    private fun pageWithTieBreaker(after: Row?, size: Int): List<Row> =
+    private fun pageWithTieBreaker(after: ListingFixture.Row?, size: Int): List<ListingFixture.Row> =
         if (after == null) {
-            jdbc.query("SELECT id, created_at FROM listing ORDER BY created_at, id LIMIT ?", rowMapper, size)
+            jdbc.query("SELECT id, created_at FROM listing ORDER BY created_at, id LIMIT ?", ListingFixture.rowMapper, size)
         } else {
             jdbc.query(
                 "SELECT id, created_at FROM listing WHERE (created_at, id) > (?, ?) ORDER BY created_at, id LIMIT ?",
-                rowMapper, after.createdAt, after.id, size,
+                ListingFixture.rowMapper, after.createdAt, after.id, size,
             )
         }
 
     /** WHERE created_at > ? — the naive version, no tie breaker. */
-    private fun pageWithoutTieBreaker(after: Row?, size: Int): List<Row> =
+    private fun pageWithoutTieBreaker(after: ListingFixture.Row?, size: Int): List<ListingFixture.Row> =
         if (after == null) {
-            jdbc.query("SELECT id, created_at FROM listing ORDER BY created_at LIMIT ?", rowMapper, size)
+            jdbc.query("SELECT id, created_at FROM listing ORDER BY created_at LIMIT ?", ListingFixture.rowMapper, size)
         } else {
             jdbc.query(
                 "SELECT id, created_at FROM listing WHERE created_at > ? ORDER BY created_at LIMIT ?",
-                rowMapper, after.createdAt, size,
+                ListingFixture.rowMapper, after.createdAt, size,
             )
         }
 
-    private fun walk(size: Int, page: (Row?, Int) -> List<Row>): List<UUID> {
+    private fun walk(size: Int, page: (ListingFixture.Row?, Int) -> List<ListingFixture.Row>): List<UUID> {
         val visited = mutableListOf<UUID>()
-        var last: Row? = null
+        var last: ListingFixture.Row? = null
         while (true) {
             val rows = page(last, size)
             if (rows.isEmpty()) return visited
@@ -190,6 +157,5 @@ class KeysetSqlProvingGroundTest {
         assertThat(joined.distinct()).isEqualTo(totalOrder.take(10))
     }
 
-    private fun explain(sql: String, vararg args: Any): String =
-        jdbc.queryForList("EXPLAIN $sql", String::class.java, *args).joinToString("\n")
+    private fun explain(sql: String, vararg args: Any): String = ListingFixture.explain(jdbc, sql, *args)
 }

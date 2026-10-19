@@ -20,6 +20,10 @@ dependencies {
 
     // Proving ground: real Postgres, hand-written SQL. See src/test/.../keyset.
     testImplementation(local.spring.jdbc)
+    testImplementation(local.spring.orm)
+    testImplementation(local.spring.data.jpa)
+    testImplementation(local.hibernate.core)
+    testImplementation(kotlin("reflect")) // Spring Data reads Kotlin repository interfaces through kotlin-reflect
     testImplementation(libs.testcontainers.postgresql)
 
     testRuntimeOnly(local.postgresql)
