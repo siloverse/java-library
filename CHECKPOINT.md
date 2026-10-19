@@ -17,6 +17,21 @@ _Last updated: 2026-08-30. This document is the arbiter: if Claude asserts somet
 - **Pending release: messaging `1.0.11`.** Everything after 1.0.9 (tracing contributor SPI, dispatcher interface + tracing decorator, dlq/retry/main topology, `@RabbitPolicy`, `MessageDispatcher` widening) exists only as `1.0.11-SNAPSHOT` in mavenLocal (`1.0.10-SNAPSHOT` was never released either). user-silo and notification-silo pin that snapshot, which is why their CI is red: the runners have no mavenLocal. Order: `./gradlew :messaging:release -PreleaseVersion=1.0.11` on a PR branch here, merge with a merge commit, then bump both silos to `1.0.11` and remove their `mavenLocal()` scaffolding.
 - **Next:** the pagination library (Kotlin; offset, slice, keyset; `pagination-core` + `pagination-spring` + `pagination-bom`, same shape as messaging). See "Then / next".
 
+## Pagination library — core built & green (0.1.0-SNAPSHOT, 2026-10-19)
+
+Second library in the container: `pagination/` with `pagination-core` (Kotlin, stdlib only, package `io.github.siloverse.pagination.core`) and `pagination-bom`. Own version `0.1.0-SNAPSHOT`, own `:pagination:release` task via the parent convention. Kotlin is switched on by the jvm-library convention's auto-detect (a `src/*/kotlin` dir exists) — no `siloverse.kotlin` property, so the Java messaging modules stay untouched. 43 tests, all AssertJ.
+
+**Types (all public, one package — split when it passes ~12 files, not before):**
+- `OffsetRequest(page, size)` with `offset: Long`; `OffsetPage(items, request, totalElements)` derives `totalPages`/`hasPrevious`/`hasNext`. A page past the end is a legal, empty page.
+- `Slice(items, request, hasNext)` — same `OffsetRequest`; the request says *where*, the result type says *what you paid for* (no `COUNT`). `Slice.fromOverfetch(rows, request)` does the `size + 1` trick and rejects more rows than that (caller wrote the wrong `LIMIT`).
+- `Cursor` (value class over one string): sort key values of the last row, each part base64url, joined by `.`; URL-safe, separator-safe, `parts()` round-trips. Typed ↔ string conversion is the adapter's job.
+- `KeysetRequest(after: Cursor?, size)`, `KeysetPage(items, request, nextCursor)`; `fromOverfetch(rows, request, cursorOf)` — `cursorOf` lives with the caller because only the caller knows the sort columns. No "before" cursor, no count (YAGNI).
+- `PaginationPolicy(defaultSize, maxSize)` — the ONE door from client input: fills the default, **rejects above max (never clamps — the rebuy paginator anti-pattern)**, validates the raw cursor string. Throws `PaginationException(parameter, message)` so the web layer can 400 naming the parameter. Misconfigured policy (default > max) fails with `IllegalArgumentException` at startup, not as a client error.
+
+**Design calls (Awais, 2026-10-19):** `require` + `IllegalArgumentException` inside the value types; the typed exception exists only at the policy door. Spring `Pageable` is NOT used in core — it is offset-only, `Page<T>` JSON is not a stable contract (Spring warns since Data 3.3), and core must work without Spring. `pagination-spring` will hold the one-line `OffsetRequest ↔ Pageable` / `Page ↔ OffsetPage` adapters, the argument resolver, and the 400 mapping. The exhibit test: `KeysetPageTest."a row inserted between pages does not make the next page repeat a row"` — offset shows row 10 twice, keyset does not.
+
+**Next:** `pagination-spring` (resolver, adapters, `@ControllerAdvice` for the 400), then a Postgres Testcontainers proving ground with one collection relation (row-duplication trap) before Selector. Projectors stay application code until a second consumer wants them.
+
 ## First-consumer findings (2026-08-26, Phase 5 dogfooding — six defects in one day)
 
 The silos became the library's first real consumers; every finding below was hit live:

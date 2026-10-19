@@ -49,5 +49,6 @@ include(
     "messaging:messaging-core",
     "messaging:messaging-rabbitmq",
     "messaging:messaging-spring",
+    "pagination:pagination-bom",
     "pagination:pagination-core",
 )
