@@ -1,4 +1,6 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.keyset
+
+import io.github.siloverse.pagination.core.offset.Slice
 
 /**
  * One page of results for a [KeysetRequest]. Carries the bookmark for the next page,

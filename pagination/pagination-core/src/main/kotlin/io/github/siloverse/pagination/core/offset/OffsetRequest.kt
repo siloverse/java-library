@@ -1,4 +1,4 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.offset
 
 /**
  * Asks for one page of a list by position: "give me page [page], [size] items per page".

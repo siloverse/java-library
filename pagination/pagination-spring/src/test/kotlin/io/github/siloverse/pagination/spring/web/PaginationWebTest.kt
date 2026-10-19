@@ -1,12 +1,18 @@
-package io.github.siloverse.pagination.spring
+package io.github.siloverse.pagination.spring.web
 
-import io.github.siloverse.pagination.core.Cursor
-import io.github.siloverse.pagination.core.KeysetPage
-import io.github.siloverse.pagination.core.KeysetRequest
-import io.github.siloverse.pagination.core.OffsetPage
-import io.github.siloverse.pagination.core.OffsetRequest
-import io.github.siloverse.pagination.core.PaginationPolicy
-import io.github.siloverse.pagination.core.Slice
+import io.github.siloverse.pagination.core.keyset.Cursor
+import io.github.siloverse.pagination.core.keyset.KeysetPage
+import io.github.siloverse.pagination.core.keyset.KeysetRequest
+import io.github.siloverse.pagination.core.offset.OffsetPage
+import io.github.siloverse.pagination.core.offset.OffsetRequest
+import io.github.siloverse.pagination.core.offset.Slice
+import io.github.siloverse.pagination.core.policy.PaginationPolicy
+import io.github.siloverse.pagination.spring.config.PaginationConfiguration
+import io.github.siloverse.pagination.spring.extensions.toResponse
+import io.github.siloverse.pagination.spring.response.KeysetPageResponse
+import io.github.siloverse.pagination.spring.response.OffsetPageResponse
+import io.github.siloverse.pagination.spring.response.SliceResponse
+
 import org.junit.jupiter.api.Test
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

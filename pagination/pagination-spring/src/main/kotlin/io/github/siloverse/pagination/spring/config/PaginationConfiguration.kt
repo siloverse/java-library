@@ -1,6 +1,9 @@
-package io.github.siloverse.pagination.spring
+package io.github.siloverse.pagination.spring.config
 
-import io.github.siloverse.pagination.core.PaginationPolicy
+import io.github.siloverse.pagination.core.policy.PaginationPolicy
+import io.github.siloverse.pagination.spring.web.PaginationArgumentResolver
+import io.github.siloverse.pagination.spring.web.PaginationExceptionHandler
+
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

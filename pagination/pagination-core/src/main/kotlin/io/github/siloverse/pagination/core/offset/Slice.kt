@@ -1,4 +1,4 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.offset
 
 /**
  * One page of results without a total count.

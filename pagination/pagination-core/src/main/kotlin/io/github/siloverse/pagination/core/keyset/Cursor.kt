@@ -1,4 +1,4 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.keyset
 
 import java.util.Base64
 

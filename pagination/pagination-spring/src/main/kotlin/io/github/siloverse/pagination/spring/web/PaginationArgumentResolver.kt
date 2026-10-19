@@ -1,9 +1,10 @@
-package io.github.siloverse.pagination.spring
+package io.github.siloverse.pagination.spring.web
 
-import io.github.siloverse.pagination.core.KeysetRequest
-import io.github.siloverse.pagination.core.OffsetRequest
-import io.github.siloverse.pagination.core.PaginationException
-import io.github.siloverse.pagination.core.PaginationPolicy
+import io.github.siloverse.pagination.core.error.PaginationException
+import io.github.siloverse.pagination.core.keyset.KeysetRequest
+import io.github.siloverse.pagination.core.offset.OffsetRequest
+import io.github.siloverse.pagination.core.policy.PaginationPolicy
+
 import org.springframework.core.MethodParameter
 import org.springframework.web.bind.support.WebDataBinderFactory
 import org.springframework.web.context.request.NativeWebRequest

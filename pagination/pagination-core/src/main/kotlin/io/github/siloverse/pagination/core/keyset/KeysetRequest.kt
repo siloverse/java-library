@@ -1,4 +1,6 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.keyset
+
+import io.github.siloverse.pagination.core.offset.OffsetRequest
 
 /**
  * Asks for the next [size] rows after a bookmark: "give me what comes after [after]".

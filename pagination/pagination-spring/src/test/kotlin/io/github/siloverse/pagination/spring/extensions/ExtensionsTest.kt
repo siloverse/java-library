@@ -1,6 +1,9 @@
-package io.github.siloverse.pagination.spring
+package io.github.siloverse.pagination.spring.extensions
 
-import io.github.siloverse.pagination.core.OffsetRequest
+import io.github.siloverse.pagination.core.offset.OffsetPage
+import io.github.siloverse.pagination.core.offset.OffsetRequest
+import io.github.siloverse.pagination.core.offset.Slice
+
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.domain.PageImpl
@@ -8,7 +11,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.SliceImpl
 import org.springframework.data.domain.Sort
 
-class PageableAdaptersTest {
+class ExtensionsTest {
 
     private val request = OffsetRequest(page = 2, size = 10)
 

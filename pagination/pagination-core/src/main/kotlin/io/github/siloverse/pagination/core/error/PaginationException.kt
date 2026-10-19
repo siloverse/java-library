@@ -1,4 +1,4 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.error
 
 /**
  * The client asked for a page in a way the policy does not allow.

@@ -1,4 +1,9 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.policy
+
+import io.github.siloverse.pagination.core.error.PaginationException
+import io.github.siloverse.pagination.core.keyset.Cursor
+import io.github.siloverse.pagination.core.keyset.KeysetRequest
+import io.github.siloverse.pagination.core.offset.OffsetRequest
 
 /**
  * The one door from raw client input to a valid request.

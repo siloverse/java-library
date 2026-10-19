@@ -1,4 +1,8 @@
-package io.github.siloverse.pagination.core
+package io.github.siloverse.pagination.core.policy
+
+import io.github.siloverse.pagination.core.error.PaginationException
+import io.github.siloverse.pagination.core.keyset.Cursor
+import io.github.siloverse.pagination.core.offset.OffsetRequest
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy

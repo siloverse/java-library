@@ -1,6 +1,7 @@
-package io.github.siloverse.pagination.spring
+package io.github.siloverse.pagination.spring.web
 
-import io.github.siloverse.pagination.core.PaginationException
+import io.github.siloverse.pagination.core.error.PaginationException
+
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.web.bind.annotation.ExceptionHandler
