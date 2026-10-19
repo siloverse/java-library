@@ -14,3 +14,9 @@ postgresql = { module = "org.postgresql:postgresql" }
 jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 micrometer-tracing = { module = "io.micrometer:micrometer-tracing" }
+spring-web = { module = "org.springframework:spring-web" }
+spring-webmvc = { module = "org.springframework:spring-webmvc" }
+spring-data-commons = { module = "org.springframework.data:spring-data-commons" }
+spring-test = { module = "org.springframework:spring-test" }
+jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api" }
+json-path = { module = "com.jayway.jsonpath:json-path" }

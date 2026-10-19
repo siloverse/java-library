@@ -51,4 +51,5 @@ include(
     "messaging:messaging-spring",
     "pagination:pagination-bom",
     "pagination:pagination-core",
+    "pagination:pagination-spring",
 )

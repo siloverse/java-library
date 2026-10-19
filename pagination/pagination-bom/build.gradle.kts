@@ -7,5 +7,6 @@ plugins {
 dependencies {
     constraints {
         api(project(":pagination:pagination-core"))
+        api(project(":pagination:pagination-spring"))
     }
 }

@@ -11,9 +11,8 @@ it rejects bad input, it never clamps it.
 | module | depends on | contents |
 |---|---|---|
 | `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `PaginationPolicy`, `PaginationException` |
+| `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, 400 mapping |
 | `pagination-bom` | — | version alignment for consumers |
-
-`pagination-spring` (query-param argument resolver, `Pageable` adapters, 400 mapping) is next.
 
 ## The three kinds of page
 
@@ -45,3 +44,46 @@ val page = KeysetPage.fromOverFetch(rows, request) { row -> Cursor.of(row.create
 ```
 
 `OffsetPage(items, request, totalElements)` and `Slice.fromOverFetch(rows, request)` follow the same pattern.
+
+## In a Spring MVC service
+
+Import the configuration. Declare a `PaginationPolicy` bean if the default (20 per page, 100 at most) is wrong for you.
+
+```kotlin
+@Configuration
+@Import(PaginationConfiguration::class)
+class WebConfiguration {
+    @Bean fun paginationPolicy() = PaginationPolicy(defaultSize = 25, maxSize = 200)
+}
+```
+
+A controller declares the request type it wants and returns the matching response model.
+The resolver reads `page`, `size` and `after` from the query string and runs them through the policy.
+
+```kotlin
+@GetMapping("/listings")
+fun listings(request: OffsetRequest): OffsetPageResponse<ListingDto> =
+    repository.findAll(request.toPageable(Sort.by("createdAt", "id")))
+        .map(ListingDto::from)
+        .toOffsetPage(request)
+        .toResponse()
+
+@GetMapping("/feed")
+fun feed(request: KeysetRequest): KeysetPageResponse<ListingDto> {
+    val rows = repository.findAfter(request.after?.parts(), limit = request.size + 1)
+    return KeysetPage.fromOverFetch(rows, request) { Cursor.of(it.createdAt.toString(), it.id.toString()) }
+        .map(ListingDto::from)   // your mapping
+        .toResponse()
+}
+```
+
+Bad input is a 400 problem detail that names the parameter:
+
+```json
+{ "type": "about:blank", "title": "Invalid pagination", "status": 400,
+  "detail": "size: must be at most 100, was 101", "parameter": "size" }
+```
+
+The response models are flat on purpose. `OffsetPageResponse` has `items`, `page`, `size`,
+`totalElements`, `totalPages`, `hasPrevious`, `hasNext`. `SliceResponse` drops the totals.
+`KeysetPageResponse` has `items`, `size`, `nextCursor` (a string, null on the last page) and `hasNext`.
