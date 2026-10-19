@@ -1,8 +1,6 @@
-package io.github.siloverse.pagination.spring.extensions
+package io.github.siloverse.pagination.spring.util
 
-import io.github.siloverse.pagination.core.offset.OffsetPage
 import io.github.siloverse.pagination.core.offset.OffsetRequest
-import io.github.siloverse.pagination.core.offset.Slice
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test

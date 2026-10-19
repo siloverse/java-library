@@ -21,7 +21,7 @@ _Last updated: 2026-08-30. This document is the arbiter: if Claude asserts somet
 
 Second library in the container: `pagination/` with `pagination-core` (Kotlin, stdlib only, package `io.github.siloverse.pagination.core`) and `pagination-bom`. Own version `0.1.0-SNAPSHOT`, own `:pagination:release` task via the parent convention. Kotlin is switched on by the jvm-library convention's auto-detect (a `src/*/kotlin` dir exists) — no `siloverse.kotlin` property, so the Java messaging modules stay untouched. 43 tests, all AssertJ.
 
-**Types (all public; Awais split them into sub-packages 2026-10-19 — core: `offset` / `keyset` / `policy` / `error`; spring: `config` / `web` / `response` / `extensions`; tests mirror the packages):**
+**Types (all public; Awais split them into sub-packages 2026-10-19 — core: `offset` / `keyset` / `policy` / `error`; spring: `config` / `web` / `response` / `util`; tests mirror the packages):**
 - `OffsetRequest(page, size)` with `offset: Long`; `OffsetPage(items, request, totalElements)` derives `totalPages`/`hasPrevious`/`hasNext`. A page past the end is a legal, empty page.
 - `Slice(items, request, hasNext)` — same `OffsetRequest`; the request says *where*, the result type says *what you paid for* (no `COUNT`). `Slice.fromOverFetch(rows, request)` does the `size + 1` trick and rejects more rows than that (caller wrote the wrong `LIMIT`).
 - `Cursor` (value class over one string): sort key values of the last row, each part base64url, joined by `.`; URL-safe, separator-safe, `parts()` round-trips. Typed ↔ string conversion is the adapter's job.

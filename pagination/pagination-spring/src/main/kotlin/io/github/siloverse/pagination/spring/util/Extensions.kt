@@ -1,4 +1,4 @@
-package io.github.siloverse.pagination.spring.extensions
+package io.github.siloverse.pagination.spring.util
 
 import io.github.siloverse.pagination.core.keyset.KeysetPage
 import io.github.siloverse.pagination.core.offset.OffsetPage
@@ -13,12 +13,15 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 
-/**
- * The JSON contract. Flat on purpose: a client should never see a nested `request` object
- * or a cursor wrapped in `{ "value": ... }`. These are the only types a controller returns.
+/*
+ * Two groups of one-line bridges.
  *
- * Spring warns against returning its own `Page<T>` because its JSON is not a stable contract.
- * These classes are that contract.
+ * Out: core page types to the flat response models in `spring.response`, which are the
+ * JSON contract. A controller calls `toResponse()` last and returns the result.
+ *
+ * In: `OffsetRequest` to Spring Data's `Pageable`, and Spring Data's `Page` / `Slice` back
+ * to the core types. Spring Data already does LIMIT, OFFSET and COUNT well; what it does
+ * not give you is the policy on the way in and a stable response shape on the way out.
  */
 
 fun <T> OffsetPage<T>.toResponse(): OffsetPageResponse<T> =
@@ -29,12 +32,6 @@ fun <T> Slice<T>.toResponse(): SliceResponse<T> =
 
 fun <T> KeysetPage<T>.toResponse(): KeysetPageResponse<T> =
     KeysetPageResponse(items, request.size, nextCursor?.value, hasNext)
-
-/**
- * Bridges between the library's offset types and Spring Data's. Each is one line on purpose:
- * Spring Data already does LIMIT, OFFSET and COUNT well. What it does not give you is the
- * policy on the way in and a stable response shape on the way out.
- */
 
 /** Hands a validated request to a Spring Data repository. Sort is the caller's choice. */
 fun OffsetRequest.toPageable(sort: Sort = Sort.unsorted()): Pageable =

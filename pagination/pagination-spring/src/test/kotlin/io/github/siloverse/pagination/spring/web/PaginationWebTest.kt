@@ -8,10 +8,10 @@ import io.github.siloverse.pagination.core.offset.OffsetRequest
 import io.github.siloverse.pagination.core.offset.Slice
 import io.github.siloverse.pagination.core.policy.PaginationPolicy
 import io.github.siloverse.pagination.spring.config.PaginationConfiguration
-import io.github.siloverse.pagination.spring.extensions.toResponse
 import io.github.siloverse.pagination.spring.response.KeysetPageResponse
 import io.github.siloverse.pagination.spring.response.OffsetPageResponse
 import io.github.siloverse.pagination.spring.response.SliceResponse
+import io.github.siloverse.pagination.spring.util.toResponse
 
 import org.junit.jupiter.api.Test
 import org.springframework.context.annotation.Bean
