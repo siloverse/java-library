@@ -41,7 +41,7 @@ Turning typed values into strings and back is the caller's job.
 ```kotlin
 val request = policy.keyset(after = rawAfterParam, size = rawSizeParam)   // throws PaginationException on bad input
 val rows = query(afterKeys = request.after?.parts(), limit = request.size + 1)
-val page = KeysetPage.fromOverfetch(rows, request) { row -> Cursor.of(row.createdAt.toString(), row.id.toString()) }
+val page = KeysetPage.fromOverFetch(rows, request) { row -> Cursor.of(row.createdAt.toString(), row.id.toString()) }
 ```
 
-`OffsetPage(items, request, totalElements)` and `Slice.fromOverfetch(rows, request)` follow the same pattern.
+`OffsetPage(items, request, totalElements)` and `Slice.fromOverFetch(rows, request)` follow the same pattern.

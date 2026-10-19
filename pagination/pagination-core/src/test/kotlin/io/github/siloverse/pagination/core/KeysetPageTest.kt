@@ -19,7 +19,7 @@ class KeysetPageTest {
     private fun fetch(request: KeysetRequest): KeysetPage<Int> {
         val after = request.after?.let(::keyOf) ?: Int.MIN_VALUE
         val rows = items.sorted().filter { it > after }.take(request.size + 1)
-        return KeysetPage.fromOverfetch(rows, request, ::cursorOf)
+        return KeysetPage.fromOverFetch(rows, request, ::cursorOf)
     }
 
     @Test
@@ -57,7 +57,7 @@ class KeysetPageTest {
 
     @Test
     fun `exactly size rows means no next page`() {
-        val page = KeysetPage.fromOverfetch((1..10).toList(), KeysetRequest(null, 10), ::cursorOf)
+        val page = KeysetPage.fromOverFetch((1..10).toList(), KeysetRequest(null, 10), ::cursorOf)
 
         assertThat(page.items).hasSize(10)
         assertThat(page.nextCursor).isNull()
@@ -73,7 +73,7 @@ class KeysetPageTest {
 
     @Test
     fun `more than size plus one rows is a caller bug`() {
-        assertThatThrownBy { KeysetPage.fromOverfetch((1..12).toList(), KeysetRequest(null, 10), ::cursorOf) }
+        assertThatThrownBy { KeysetPage.fromOverFetch((1..12).toList(), KeysetRequest(null, 10), ::cursorOf) }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("overfetch")
     }

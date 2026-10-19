@@ -30,7 +30,7 @@ data class KeysetPage<T>(
          * last row that is kept. [cursorOf] turns a row into its bookmark; it is the
          * caller's knowledge of which columns the rows are sorted by.
          */
-        fun <T> fromOverfetch(rows: List<T>, request: KeysetRequest, cursorOf: (T) -> Cursor): KeysetPage<T> {
+        fun <T> fromOverFetch(rows: List<T>, request: KeysetRequest, cursorOf: (T) -> Cursor): KeysetPage<T> {
             require(rows.size <= request.size + 1) {
                 "fetched ${rows.size} rows but the overfetch limit is ${request.size + 1}"
             }
