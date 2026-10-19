@@ -35,6 +35,14 @@ That is why it shares `OffsetRequest`.
 `Cursor.of("2026-10-19T10:00:00Z", "42")` builds one from the key values; `parts()` gets them back.
 Turning typed values into strings and back is the caller's job.
 
+Two facts proved against Postgres 17 (see `KeysetSqlProvingGroundTest`):
+
+- Write the predicate as a row value, `(created_at, id) > (?, ?)`. Postgres seeks into the index
+  (`Index Cond`). The equivalent `created_at > ? OR (created_at = ? AND id > ?)` walks the index from
+  the start and filters, so deep pages get slow again.
+- Build the cursor from the values the database returned, not the ones the application created.
+  Postgres rounds timestamps to microseconds; a nanosecond `Instant` points at a row that is not there.
+
 ## Building a result from a query
 
 ```kotlin

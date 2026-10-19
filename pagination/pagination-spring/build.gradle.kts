@@ -17,4 +17,11 @@ dependencies {
     testImplementation(local.jakarta.servlet.api)
     testImplementation(local.jackson.databind)
     testImplementation(local.json.path)
+
+    // Proving ground: real Postgres, hand-written SQL. See src/test/.../keyset.
+    testImplementation(local.spring.jdbc)
+    testImplementation(libs.testcontainers.postgresql)
+
+    testRuntimeOnly(local.postgresql)
+    testRuntimeOnly(local.slf4j.simple)
 }
