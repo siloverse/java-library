@@ -1,6 +1,7 @@
 package io.github.siloverse.pagination.core.sort
 
 import io.github.siloverse.pagination.core.error.PaginationException
+import io.github.siloverse.pagination.core.keyset.KeysetKey
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -8,7 +9,7 @@ import org.junit.jupiter.api.Test
 class SortRequestTest {
 
     private val listing = SortableFields(
-        "id", "price", "createdAt",
+        KeysetKey.uuid("id"), KeysetKey.long("price"), KeysetKey.offsetDateTime("createdAt"),
         tieBreaker = "id",
         defaultSort = listOf(SortOrder("createdAt", Direction.DESC)),
     )
@@ -109,14 +110,24 @@ class SortRequestTest {
 
     @Test
     fun `the contract checks itself`() {
-        assertThatThrownBy { SortableFields("price", tieBreaker = "id") }
+        assertThatThrownBy { SortableFields(KeysetKey.long("price"), tieBreaker = "id") }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("tie breaker 'id' is not a sortable field")
-        assertThatThrownBy { SortableFields("id", "id", tieBreaker = "id") }
+        assertThatThrownBy { SortableFields(KeysetKey.uuid("id"), KeysetKey.uuid("id"), tieBreaker = "id") }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("twice")
-        assertThatThrownBy { SortableFields("id", tieBreaker = "id", defaultSort = listOf(SortOrder("price"))) }
+        assertThatThrownBy { SortableFields(KeysetKey.uuid("id"), tieBreaker = "id", defaultSort = listOf(SortOrder("price"))) }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("not sortable")
+    }
+
+    @Test
+    fun `the keys for a sort carry the client's directions, tie breaker last`() {
+        val keys = listing.keysFor(SortRequest.parse(listing, listOf("price,desc")))
+
+        assertThat(keys.properties).containsExactly("price", "id")
+        assertThat(keys.keys.map { it.direction }).containsExactly(Direction.DESC, Direction.ASC)
+        assertThat(keys.sameDirection).isFalse()
+        assertThat(listing.keysFor(SortRequest.parse(listing, listOf("price", "createdAt"))).sameDirection).isTrue()
     }
 }

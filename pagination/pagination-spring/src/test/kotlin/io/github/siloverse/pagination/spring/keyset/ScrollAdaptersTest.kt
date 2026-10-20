@@ -2,9 +2,12 @@ package io.github.siloverse.pagination.spring.keyset
 
 import io.github.siloverse.pagination.core.error.PaginationException
 import io.github.siloverse.pagination.core.keyset.Cursor
+import io.github.siloverse.pagination.core.keyset.KeysetKey
+import io.github.siloverse.pagination.core.keyset.KeysetKeys
 import io.github.siloverse.pagination.core.keyset.KeysetPage
 import io.github.siloverse.pagination.core.keyset.KeysetRequest
 import io.github.siloverse.pagination.core.policy.PaginationPolicy
+import io.github.siloverse.pagination.core.sort.Direction
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterAll
@@ -49,7 +52,7 @@ class ScrollAdaptersTest {
         val request = policy.keyset(after = after, size = null)
         return repository
             .findBy(filter) { query: FluentQuery.FetchableFluentQuery<Listing> ->
-                query.sortBy(keys.sort()).limit(request.size).scroll(request.toScrollPosition(keys))
+                query.sortBy(keys.toSort()).limit(request.size).scroll(request.toScrollPosition(keys))
             }
             .toKeysetPage(request, keys)
     }
@@ -129,9 +132,10 @@ class ScrollAdaptersTest {
 
     @Test
     fun `keys produce the matching sort`() {
-        val sort = keys.sort()
+        val sort = keys.toSort()
 
         assertThat(sort.map { it.property }).containsExactly("createdAt", "id")
         assertThat(sort.all { it.isAscending }).isTrue()
+        assertThat(KeysetKeys(KeysetKey.long("price", Direction.DESC)).toSort().first().isDescending).isTrue()
     }
 }
