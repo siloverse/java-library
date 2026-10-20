@@ -8,5 +8,6 @@ dependencies {
     constraints {
         api(project(":pagination:pagination-core"))
         api(project(":pagination:pagination-spring"))
+        api(project(":pagination:pagination-jdsl"))
     }
 }
