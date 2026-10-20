@@ -23,9 +23,9 @@ repository block and credentials are the same as for messaging.
 
 | module | depends on | contents |
 |---|---|---|
-| `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `KeysetKey` / `KeysetKeys`, `SortableFields` / `SortRequest`, `PaginationPolicy`, `PaginationException` |
+| `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `KeysetKey` / `KeysetKeys`, `SortableFields` / `SortRequest` / `SortContract` / `SortRegistry`, `PaginationPolicy`, `PaginationException` |
 | `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, `toSort` + scroll adapters, 400 mapping |
-| `pagination-jdsl` | core, Kotlin JDSL | `JdslKeyset` bindings, `keysetAfter` (row-value seek), `keysetOrder`, rows to `KeysetPage` |
+| `pagination-jdsl` | core, Kotlin JDSL | `SortSpec` per entity, `keysetAfter` (row-value seek), `keysetOrder` / `sortOrder`, rows to `KeysetPage` |
 | `pagination-bom` | — | version alignment for consumers |
 
 ## 3. The three kinds of page
@@ -45,6 +45,7 @@ That is why it shares `OffsetRequest`.
 2. The cursor is the sort key values of the last row on the page. SQL:
    `WHERE (created_at, id) > (?, ?) ORDER BY created_at, id LIMIT size + 1`.
 3. On the wire the cursor is one opaque string (`Cursor.value`). The client passes it back; it never builds one.
+   It starts with the sort it was built for, so a cursor from `price,desc` sent with `sort=createdAt` is a 400 naming both.
 
 `Cursor.of("2026-10-19T10:00:00Z", "42")` builds one from the key values; `parts()` gets them back.
 Turning typed values into strings and back is the caller's job.
@@ -95,22 +96,32 @@ fun listings(request: OffsetRequest): OffsetPageResponse<ListingDto> =
         .map(ListingDto::from)
         .toResponse()
 
-// written once, next to the list: which fields sort, how each travels through the cursor, the tie breaker
-private val sortable = SortableFields(
-    KeysetKey.offsetDateTime("createdAt"), KeysetKey.long("price"), KeysetKey.uuid("id"),
-    tieBreaker = "id",
-)
+// one bean per entity: which fields sort, how each travels through the cursor, the tie breaker
+@Component
+class ListingSort : SortSpec<Listing>(Listing::class, tieBreaker = "id", defaultSort = listOf(SortOrder("createdAt", Direction.DESC))) {
+    val createdAt = sortable(KeysetKey.offsetDateTime("createdAt"), Listing::createdAt)
+    val price     = sortable(KeysetKey.long("price"), Listing::price)
+    val id        = sortable(KeysetKey.uuid("id"), Listing::id)
+}
 
 @GetMapping("/feed")
-fun feed(request: KeysetRequest, @RequestParam sort: List<String>?): KeysetPageResponse<ListingDto> {
-    val keys = sortable.keysFor(SortRequest.parse(sortable, sort))   // client's sort, tie breaker appended, 400 on a bad field
-    return repository
-        .findBy(filter) { q -> q.sortBy(keys.toSort()).limit(request.size).scroll(request.toScrollPosition(keys)) }
-        .toKeysetPage(request, keys)
-        .map(ListingDto::from)
-        .toResponse()
-}
+fun feed(@Selectors(entity = Listing::class) selectors: List<Selector>, request: KeysetRequest): KeysetPageResponse<ListingDto> =
+    repository.findAll(limit = request.size + 1) {
+        select(entity(Listing::class)).from(entity(Listing::class))
+            .where(and(selectorSpecManager.apply(selectors), keysetAfter(request, listingSort)))
+            .orderBy(*keysetOrder(request, listingSort).toTypedArray())
+    }.toKeysetPage(request, listingSort).map(ListingDto::from).toResponse()
 ```
+
+The resolver reads `page`, `size`, `after` and `sort`. It finds the entity from `@Paged(entity = ...)`
+on the request parameter, or from any sibling annotation with an `entity` attribute such as the
+selector's `@Selectors`, validates `sort=` against that entity's `SortSpec`, appends the tie breaker,
+and hands the controller a request whose sort is already checked. A list with no `SortSpec` has a
+fixed order; `sort=` for it is a 400. Keyset paging needs a `SortSpec`.
+
+With Spring Data instead of JDSL, the same request drives the scroll adapters:
+`findBy(spec) { it.sortBy(keys.toSort()).limit(request.size).scroll(request.toScrollPosition(keys)) }.toKeysetPage(request, keys)`
+with `keys = sortable.keysFor(request.sort)`.
 
 `filter` is any `Specification` (the Selector library will produce it); Spring Data ANDs the cursor
 predicate onto it and writes one query. The cursor says where you are; the filter says which list
