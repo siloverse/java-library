@@ -31,10 +31,19 @@ class KeysetKeys(val keys: List<KeysetKey<*>>) {
     val direction: Direction
         get() = keys.first().direction
 
-    /** The typed key values a client's cursor carries, in key order. A cursor that does not fit this list is a client error. */
+    /** `price:desc,id:asc` — the first part of every cursor built from these keys. */
+    val signature: String
+        get() = keys.joinToString(",") { "${it.property}:${it.direction.name.lowercase()}" }
+
+    /**
+     * The typed key values a client's cursor carries, in key order. A cursor built for another
+     * sort, or for another list, is a client error: its values would not mean a position here.
+     */
     fun decode(cursor: Cursor): List<Any> {
-        val parts = cursor.parts()
-        if (parts.size != keys.size) throw PaginationException("after", "does not belong to this list")
+        val all = cursor.parts()
+        if (all.first() != signature) throw PaginationException("after", "was made for sort '${all.first()}', not '$signature'")
+        if (all.size != keys.size + 1) throw PaginationException("after", "does not belong to this list")
+        val parts = all.drop(1)
         return keys.zip(parts).map { (key, part) ->
             try {
                 key.decode(part)
@@ -47,6 +56,6 @@ class KeysetKeys(val keys: List<KeysetKey<*>>) {
     /** The cursor for a row, from its key values in key order, as the database returned them. */
     fun cursorOf(values: List<Any>): Cursor {
         require(values.size == keys.size) { "expected ${keys.size} key values, got ${values.size}" }
-        return Cursor.of(keys.zip(values).map { (key, value) -> key.encodeAny(value) })
+        return Cursor.of(listOf(signature) + keys.zip(values).map { (key, value) -> key.encodeAny(value) })
     }
 }

@@ -4,6 +4,8 @@ import io.github.siloverse.pagination.core.error.PaginationException
 import io.github.siloverse.pagination.core.keyset.Cursor
 import io.github.siloverse.pagination.core.offset.OffsetRequest
 
+import io.github.siloverse.pagination.core.sort.SortOrder
+import io.github.siloverse.pagination.core.sort.SortRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test
 class PaginationPolicyTest {
 
     private val policy = PaginationPolicy(defaultSize = 20, maxSize = 100)
+    private val byId = SortRequest(listOf(SortOrder("id")))
 
     @Test
     fun `missing page and size fall back to page zero and the default size`() {
@@ -51,36 +54,37 @@ class PaginationPolicyTest {
 
     @Test
     fun `keyset without a cursor starts from the beginning`() {
-        val request = policy.keyset(after = null, size = null)
+        val request = policy.keyset(after = null, size = null, sort = byId)
 
         assertThat(request.isFirstPage).isTrue()
         assertThat(request.size).isEqualTo(20)
+        assertThat(request.sort).isEqualTo(byId)
     }
 
     @Test
     fun `keyset accepts a cursor we gave out`() {
-        val cursor = Cursor.of("2026-10-19T10:00:00Z", "42")
+        val cursor = Cursor.of("id:asc", "42")
 
-        assertThat(policy.keyset(after = cursor.value, size = 10).after).isEqualTo(cursor)
+        assertThat(policy.keyset(after = cursor.value, size = 10, sort = byId).after).isEqualTo(cursor)
     }
 
     @Test
     fun `keyset rejects a cursor the client made up`() {
-        assertThatThrownBy { policy.keyset(after = "not base64 at all!", size = 10) }
+        assertThatThrownBy { policy.keyset(after = "not base64 at all!", size = 10, sort = byId) }
             .isInstanceOf(PaginationException::class.java)
             .hasFieldOrPropertyWithValue("parameter", "after")
     }
 
     @Test
     fun `keyset rejects a blank cursor`() {
-        assertThatThrownBy { policy.keyset(after = " ", size = 10) }
+        assertThatThrownBy { policy.keyset(after = " ", size = 10, sort = byId) }
             .isInstanceOf(PaginationException::class.java)
             .hasFieldOrPropertyWithValue("parameter", "after")
     }
 
     @Test
     fun `keyset size is checked the same way`() {
-        assertThatThrownBy { policy.keyset(after = null, size = 101) }
+        assertThatThrownBy { policy.keyset(after = null, size = 101, sort = byId) }
             .isInstanceOf(PaginationException::class.java)
             .hasFieldOrPropertyWithValue("parameter", "size")
     }

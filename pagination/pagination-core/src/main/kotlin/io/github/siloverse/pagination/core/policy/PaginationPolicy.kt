@@ -4,6 +4,7 @@ import io.github.siloverse.pagination.core.error.PaginationException
 import io.github.siloverse.pagination.core.keyset.Cursor
 import io.github.siloverse.pagination.core.keyset.KeysetRequest
 import io.github.siloverse.pagination.core.offset.OffsetRequest
+import io.github.siloverse.pagination.core.sort.SortRequest
 
 /**
  * The one door from raw client input to a valid request.
@@ -23,14 +24,14 @@ data class PaginationPolicy(val defaultSize: Int, val maxSize: Int) {
         require(defaultSize in 1..maxSize) { "defaultSize must be between 1 and maxSize ($maxSize), was $defaultSize" }
     }
 
-    fun offset(page: Int?, size: Int?): OffsetRequest {
+    fun offset(page: Int?, size: Int?, sort: SortRequest? = null): OffsetRequest {
         val resolvedPage = page ?: 0
         if (resolvedPage < 0) throw PaginationException("page", "must be 0 or more, was $resolvedPage")
-        return OffsetRequest(resolvedPage, resolveSize(size))
+        return OffsetRequest(resolvedPage, resolveSize(size), sort)
     }
 
-    fun keyset(after: String?, size: Int?): KeysetRequest =
-        KeysetRequest(after?.let(::parseCursor), resolveSize(size))
+    fun keyset(after: String?, size: Int?, sort: SortRequest): KeysetRequest =
+        KeysetRequest(after?.let(::parseCursor), resolveSize(size), sort)
 
     private fun resolveSize(size: Int?): Int {
         val resolved = size ?: defaultSize

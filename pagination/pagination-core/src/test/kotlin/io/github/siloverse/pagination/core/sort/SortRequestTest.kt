@@ -102,6 +102,11 @@ class SortRequestTest {
     }
 
     @Test
+    fun `the signature names the order`() {
+        assertThat(SortRequest.parse(listing, listOf("price,desc")).signature).isEqualTo("price:desc,id:asc")
+    }
+
+    @Test
     fun `the result is always total, the last order is the tie breaker`() {
         listOf(parse(), parse("price"), parse("createdAt,desc", "price"), parse("id,desc")).forEach { orders ->
             assertThat(orders.last().field).isEqualTo("id")

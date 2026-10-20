@@ -18,6 +18,10 @@ data class SortRequest(val orders: List<SortOrder>) {
         require(orders.map { it.field }.distinct().size == orders.size) { "a sort field appears twice" }
     }
 
+    /** `price:desc,id:asc` — names this order, so a cursor can say which sort it was built for. */
+    val signature: String
+        get() = orders.joinToString(",") { "${it.field}:${it.direction.name.lowercase()}" }
+
     companion object {
         const val PARAMETER = "sort"
 
