@@ -56,4 +56,6 @@ include(
     "selector:selector-core",
     "selector:selector-jdsl",
     "selector:selector-spring",
+    "projector:projector-core",
+    "projector:projector-spring",
 )

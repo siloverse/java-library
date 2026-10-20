@@ -7,7 +7,9 @@ Libraries share one repository until one of them needs its own ownership or cade
 | Library | What it is | Released | Consumers |
 | --- | --- | --- | --- |
 | `messaging` | Event/command messaging for silo services: transactional outbox + relay, RabbitMQ transport with publisher confirms, typed consumers, opt-in inbox dedup, trace context carried through the broker, constant-delay retry tiers (`@RabbitPolicy`). | `1.0.12` on GitHub Packages. | user-silo (publisher), notification-silo (consumer) |
-| `pagination` | Kotlin. Offset, slice and keyset pagination as one core model (stdlib only) plus a Spring adapter: query-param resolver, policy with a 400 mapping, flat response models, `Pageable` and keyset-scroll adapters. Keyset behaviour proven against Postgres 17. | `0.1.0` on GitHub Packages. | booking-silo listings (planned) |
+| `pagination` | Kotlin. Offset, slice and keyset pagination as one core model (stdlib only); the client's sort inside the request, validated against a `SortSpec` per entity; Spring resolver with 400 mapping and flat responses; Spring Data scroll adapters; Kotlin JDSL adapter with a row-value keyset seek. Proven against Postgres 17. | `0.1.0` on GitHub Packages (0.2.0 pending: API changed). | booking-silo listings (planned) |
+| `selector` | Kotlin. `filter.*` query parameters to a WHERE clause: one spec per filter (entity, key, value type, arity), registry, Kotlin JDSL specs and manager, `@Selectors` resolver. Unknown or malformed filters are 400s. | unreleased | booking-silo listings (planned) |
+| `projector` | Kotlin. Optional DTO parts (`include=items`) computed by batched projectors, one call per page; registry checks fields against projectors; `Projection` resolver and 400 mapping. | unreleased | booking-silo listings (planned) |
 
 ## Working with the repo
 
@@ -29,4 +31,6 @@ Libraries share one repository until one of them needs its own ownership or cade
 
 - `messaging/README.md`: the consumer guide (contract jars, schema, wiring, consumers).
 - `pagination/README.md`: the three kinds of page, keyset rules, the Spring wiring, what was proven on Postgres.
+- `selector/README.md`: the filter grammar, one spec per filter, the JDSL manager, the controller.
+- `projector/README.md`: optional DTO parts, batched projectors, include/exclude.
 - `CHECKPOINT.md`: the engineering journal and the arbiter of what is decided and built.
