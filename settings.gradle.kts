@@ -53,4 +53,5 @@ include(
     "pagination:pagination-core",
     "pagination:pagination-spring",
     "selector:selector-core",
+    "selector:selector-jdsl",
 )
