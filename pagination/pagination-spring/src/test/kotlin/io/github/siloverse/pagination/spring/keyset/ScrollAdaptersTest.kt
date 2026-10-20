@@ -8,6 +8,8 @@ import io.github.siloverse.pagination.core.keyset.KeysetPage
 import io.github.siloverse.pagination.core.keyset.KeysetRequest
 import io.github.siloverse.pagination.core.policy.PaginationPolicy
 import io.github.siloverse.pagination.core.sort.Direction
+import io.github.siloverse.pagination.core.sort.SortRequest
+import io.github.siloverse.pagination.core.sort.SortableFields
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterAll
@@ -22,9 +24,8 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /**
- * Step 3: the adapter, proven on the real database. A list declares its keys once; the policy
- * parses the client's input; the fluent query composes filter, sort, limit and position; the
- * window becomes a page with a cursor the client can send back.
+ * The Spring Data engine for keyset, proven on the real database. The request carries the
+ * client's validated sort; the keys are built from it; the window becomes a page with a cursor.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ScrollAdaptersTest {
@@ -33,8 +34,7 @@ class ScrollAdaptersTest {
     private lateinit var repository: ListingRepository
     private lateinit var jdbc: JdbcTemplate
 
-    /** Written once, next to the list: the sort IS the keyset. */
-    private val keys = KeysetKeys(KeysetKey.offsetDateTime("createdAt"), KeysetKey.uuid("id"))
+    private val sortable = SortableFields(KeysetKey.offsetDateTime("createdAt"), KeysetKey.uuid("id"), tieBreaker = "id")
     private val policy = PaginationPolicy(defaultSize = 25, maxSize = 100)
 
     @BeforeAll
@@ -47,9 +47,13 @@ class ScrollAdaptersTest {
     @AfterAll
     fun stop() = context.close()
 
+    private fun request(after: String?, sort: List<String>? = listOf("createdAt")): KeysetRequest =
+        policy.keyset(after = after, size = null, sort = SortRequest.parse(sortable, sort))
+
     /** What a service method looks like with the adapter. */
     private fun page(after: String?, filter: Specification<Listing> = Specification.unrestricted()): KeysetPage<Listing> {
-        val request = policy.keyset(after = after, size = null)
+        val request = request(after)
+        val keys = sortable.keysFor(request.sort)
         return repository
             .findBy(filter) { query: FluentQuery.FetchableFluentQuery<Listing> ->
                 query.sortBy(keys.toSort()).limit(request.size).scroll(request.toScrollPosition(keys))
@@ -72,11 +76,11 @@ class ScrollAdaptersTest {
     }
 
     @Test
-    fun `the cursor holds the last row's sort values, as the database returned them`() {
+    fun `the cursor names its sort and holds the last row's values, as the database returned them`() {
         val first = page(after = null)
         val last = first.items.last()
 
-        assertThat(first.nextCursor!!.parts()).containsExactly(last.createdAt.toString(), last.id.toString())
+        assertThat(first.nextCursor!!.parts()).containsExactly("createdAt:asc,id:asc", last.createdAt.toString(), last.id.toString())
     }
 
     @Test
@@ -99,30 +103,31 @@ class ScrollAdaptersTest {
 
     @Test
     fun `the last page has no cursor`() {
-        val expectedLast = ListingFixture.totalOrder(jdbc).takeLast(5)
-        val boundary = repository.findById(ListingFixture.totalOrder(jdbc)[4994]).get()
-        val cursor = Cursor.of(boundary.createdAt.toString(), boundary.id.toString())
+        val order = ListingFixture.totalOrder(jdbc)
+        val boundary = repository.findById(order[4994]).get()
+        val keys = sortable.keysFor(request(null).sort)
 
-        val page = page(after = cursor.value)
+        val page = page(after = keys.cursorOf(listOf(boundary.createdAt, boundary.id)).value)
 
-        assertThat(page.items.map { it.id }).isEqualTo(expectedLast)
+        assertThat(page.items.map { it.id }).isEqualTo(order.takeLast(5))
         assertThat(page.hasNext).isFalse()
         assertThat(page.nextCursor).isNull()
     }
 
     @Test
-    fun `a cursor with the wrong number of parts does not belong to this list`() {
-        val request = KeysetRequest(after = Cursor.of("only-one-part"), size = 10)
+    fun `a cursor made for another sort is a client error naming both sorts`() {
+        val byIdDesc = sortable.keysFor(SortRequest.parse(sortable, listOf("id,desc")))
+        val cursor = byIdDesc.cursorOf(listOf(UUID.randomUUID()))
 
-        assertThatThrownBy { request.toScrollPosition(keys) }
+        assertThatThrownBy { page(after = cursor.value) }
             .isInstanceOf(PaginationException::class.java)
-            .hasFieldOrPropertyWithValue("parameter", "after")
-            .hasMessageContaining("does not belong")
+            .hasMessage("after: was made for sort 'id:desc', not 'createdAt:asc,id:asc'")
     }
 
     @Test
     fun `a cursor whose part cannot be decoded is invalid`() {
-        val request = KeysetRequest(after = Cursor.of("not a date", UUID.randomUUID().toString()), size = 10)
+        val keys = sortable.keysFor(request(null).sort)
+        val request = KeysetRequest(after = Cursor.of(keys.signature, "not a date", UUID.randomUUID().toString()), size = 10, sort = request(null).sort)
 
         assertThatThrownBy { request.toScrollPosition(keys) }
             .isInstanceOf(PaginationException::class.java)
@@ -132,10 +137,12 @@ class ScrollAdaptersTest {
 
     @Test
     fun `keys produce the matching sort`() {
+        val keys = sortable.keysFor(SortRequest.parse(sortable, listOf("createdAt,desc")))
         val sort = keys.toSort()
 
         assertThat(sort.map { it.property }).containsExactly("createdAt", "id")
-        assertThat(sort.all { it.isAscending }).isTrue()
+        assertThat(sort.getOrderFor("createdAt")!!.isDescending).isTrue()
+        assertThat(sort.getOrderFor("id")!!.isAscending).isTrue()
         assertThat(KeysetKeys(KeysetKey.long("price", Direction.DESC)).toSort().first().isDescending).isTrue()
     }
 }
