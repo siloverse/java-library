@@ -1,21 +1,14 @@
-package io.github.siloverse.selector.core.sort
+package io.github.siloverse.pagination.core.sort
 
-import io.github.siloverse.selector.core.definition.Field
-import io.github.siloverse.selector.core.definition.FieldType
-import io.github.siloverse.selector.core.definition.ListDefinition
-import io.github.siloverse.selector.core.definition.Operator
-import io.github.siloverse.selector.core.error.SelectorException
+import io.github.siloverse.pagination.core.error.PaginationException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 
 class SortRequestTest {
 
-    private val listing = ListDefinition(
-        Field("id", FieldType.UUID, sortable = true),
-        Field("price", FieldType.LONG, sortable = true),
-        Field("createdAt", FieldType.OFFSET_DATE_TIME, sortable = true),
-        Field("title", FieldType.STRING, operators = setOf(Operator.LIKE)),
+    private val listing = SortableFields(
+        "id", "price", "createdAt",
         tieBreaker = "id",
         defaultSort = listOf(SortOrder("createdAt", Direction.DESC)),
     )
@@ -58,7 +51,7 @@ class SortRequestTest {
     @Test
     fun `the tie breaker anywhere but last makes later fields pointless, so it is rejected`() {
         assertThatThrownBy { parse("id", "price") }
-            .isInstanceOf(SelectorException::class.java)
+            .isInstanceOf(PaginationException::class.java)
             .hasFieldOrPropertyWithValue("parameter", "sort")
             .hasMessageContaining("'id' must be the last sort field")
     }
@@ -66,15 +59,15 @@ class SortRequestTest {
     @Test
     fun `an unknown field is a client error naming sort`() {
         assertThatThrownBy { parse("colour") }
-            .isInstanceOf(SelectorException::class.java)
+            .isInstanceOf(PaginationException::class.java)
             .hasFieldOrPropertyWithValue("parameter", "sort")
-            .hasMessageContaining("unknown field 'colour'")
+            .hasMessageContaining("'colour' is not sortable")
     }
 
     @Test
-    fun `a field that exists but is not sortable is rejected, and the message lists what is`() {
+    fun `a field that is not sortable is rejected, and the message lists what is`() {
         assertThatThrownBy { parse("title") }
-            .isInstanceOf(SelectorException::class.java)
+            .isInstanceOf(PaginationException::class.java)
             .hasMessageContaining("'title' is not sortable")
             .hasMessageContaining("[id, price, createdAt]")
     }
@@ -82,29 +75,29 @@ class SortRequestTest {
     @Test
     fun `field names are case sensitive`() {
         assertThatThrownBy { parse("Price") }
-            .isInstanceOf(SelectorException::class.java)
-            .hasMessageContaining("unknown field 'Price'")
+            .isInstanceOf(PaginationException::class.java)
+            .hasMessageContaining("'Price' is not sortable")
     }
 
     @Test
     fun `a bad direction is rejected`() {
         assertThatThrownBy { parse("price,down") }
-            .isInstanceOf(SelectorException::class.java)
+            .isInstanceOf(PaginationException::class.java)
             .hasMessageContaining("'down' is not 'asc' or 'desc'")
     }
 
     @Test
     fun `a field twice is rejected`() {
         assertThatThrownBy { parse("price", "price,desc") }
-            .isInstanceOf(SelectorException::class.java)
+            .isInstanceOf(PaginationException::class.java)
             .hasMessageContaining("'price' appears twice")
     }
 
     @Test
     fun `malformed entries are rejected`() {
-        assertThatThrownBy { parse("") }.isInstanceOf(SelectorException::class.java)
-        assertThatThrownBy { parse("price,desc,extra") }.isInstanceOf(SelectorException::class.java)
-        assertThatThrownBy { parse(",desc") }.isInstanceOf(SelectorException::class.java)
+        assertThatThrownBy { parse("") }.isInstanceOf(PaginationException::class.java)
+        assertThatThrownBy { parse("price,desc,extra") }.isInstanceOf(PaginationException::class.java)
+        assertThatThrownBy { parse(",desc") }.isInstanceOf(PaginationException::class.java)
     }
 
     @Test
@@ -112,5 +105,18 @@ class SortRequestTest {
         listOf(parse(), parse("price"), parse("createdAt,desc", "price"), parse("id,desc")).forEach { orders ->
             assertThat(orders.last().field).isEqualTo("id")
         }
+    }
+
+    @Test
+    fun `the contract checks itself`() {
+        assertThatThrownBy { SortableFields("price", tieBreaker = "id") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("tie breaker 'id' is not a sortable field")
+        assertThatThrownBy { SortableFields("id", "id", tieBreaker = "id") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("twice")
+        assertThatThrownBy { SortableFields("id", tieBreaker = "id", defaultSort = listOf(SortOrder("price"))) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("not sortable")
     }
 }

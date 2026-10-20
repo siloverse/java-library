@@ -1,4 +1,4 @@
-package io.github.siloverse.selector.core.sort
+package io.github.siloverse.pagination.core.sort
 
 enum class Direction {
     ASC,
