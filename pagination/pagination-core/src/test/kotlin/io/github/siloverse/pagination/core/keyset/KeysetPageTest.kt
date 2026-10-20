@@ -90,4 +90,12 @@ class KeysetPageTest {
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("size")
     }
+
+    @Test
+    fun `map converts the items and keeps the cursor`() {
+        val page = fetch(KeysetRequest(null, 10)).map { "item-$it" }
+
+        assertThat(page.items).containsExactly("item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10")
+        assertThat(page.nextCursor).isEqualTo(cursorOf(10))
+    }
 }

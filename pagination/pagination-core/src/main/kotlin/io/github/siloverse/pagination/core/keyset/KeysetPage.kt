@@ -24,6 +24,9 @@ data class KeysetPage<T>(
     val hasNext: Boolean
         get() = nextCursor != null
 
+    /** Same page, items converted. The cursor stays: it was built from the rows, not the DTOs. */
+    fun <R> map(transform: (T) -> R): KeysetPage<R> = KeysetPage(items.map(transform), request, nextCursor)
+
     companion object {
 
         /**

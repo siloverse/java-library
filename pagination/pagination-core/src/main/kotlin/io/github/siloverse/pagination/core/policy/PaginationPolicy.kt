@@ -43,7 +43,7 @@ data class PaginationPolicy(val defaultSize: Int, val maxSize: Int) {
     private fun parseCursor(raw: String): Cursor {
         val cursor = try {
             Cursor(raw).also { it.parts() }
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             throw PaginationException("after", "is not a valid cursor")
         }
         return cursor

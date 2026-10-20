@@ -26,4 +26,7 @@ data class OffsetPage<T>(
 
     val hasNext: Boolean
         get() = request.page + 1 < totalPages
+
+    /** Same page, items converted. For turning entities into DTOs before the response. */
+    fun <R> map(transform: (T) -> R): OffsetPage<R> = OffsetPage(items.map(transform), request, totalElements)
 }

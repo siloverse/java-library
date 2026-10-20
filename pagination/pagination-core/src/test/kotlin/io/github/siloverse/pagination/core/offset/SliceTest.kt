@@ -73,4 +73,12 @@ class SliceTest {
         assertThatThrownBy { Slice(items = (1..11).toList(), request = OffsetRequest(0, 10), hasNext = false) }
             .isInstanceOf(IllegalArgumentException::class.java)
     }
+
+    @Test
+    fun `map converts the items and keeps hasNext`() {
+        val slice = fetch(OffsetRequest(page = 0, size = 10)).map { it * 2 }
+
+        assertThat(slice.items).containsExactlyElementsOf((1..10).map { it * 2 })
+        assertThat(slice.hasNext).isTrue()
+    }
 }

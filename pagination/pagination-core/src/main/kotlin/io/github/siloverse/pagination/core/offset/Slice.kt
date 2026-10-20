@@ -24,6 +24,9 @@ data class Slice<T>(
     val hasPrevious: Boolean
         get() = request.page > 0
 
+    /** Same slice, items converted. */
+    fun <R> map(transform: (T) -> R): Slice<R> = Slice(items.map(transform), request, hasNext)
+
     companion object {
 
         /**

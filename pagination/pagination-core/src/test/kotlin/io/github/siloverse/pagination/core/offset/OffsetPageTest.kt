@@ -92,4 +92,13 @@ class OffsetPageTest {
         assertThatThrownBy { OffsetPage(items = (1..11).toList(), request = OffsetRequest(0, 10), totalElements = 23) }
             .isInstanceOf(IllegalArgumentException::class.java)
     }
+
+    @Test
+    fun `map converts the items and keeps the counts`() {
+        val page = fetch(OffsetRequest(page = 2, size = 10)).map { "item-$it" }
+
+        assertThat(page.items).containsExactly("item-21", "item-22", "item-23")
+        assertThat(page.totalElements).isEqualTo(23)
+        assertThat(page.request).isEqualTo(OffsetRequest(2, 10))
+    }
 }

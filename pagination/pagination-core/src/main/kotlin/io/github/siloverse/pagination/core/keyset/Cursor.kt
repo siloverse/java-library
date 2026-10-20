@@ -16,6 +16,7 @@ import java.util.Base64
 @JvmInline
 value class Cursor(val value: String) {
 
+
     init {
         require(value.isNotBlank()) { "cursor must not be blank" }
     }
