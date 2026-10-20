@@ -6,8 +6,8 @@ Libraries share one repository until one of them needs its own ownership or cade
 
 | Library | What it is | Released | Consumers |
 | --- | --- | --- | --- |
-| `messaging` | Event/command messaging for silo services: transactional outbox + relay, RabbitMQ transport with publisher confirms, typed consumers, opt-in inbox dedup, trace context carried through the broker, constant-delay retry tiers (`@RabbitPolicy`). | `1.0.9` on GitHub Packages. `1.0.11` (tracing headers + retry tiers) is still a local snapshot, see `CHECKPOINT.md`. | user-silo (publisher), notification-silo (consumer) |
-| `pagination` | Next up, in Kotlin: offset, slice and keyset pagination as one core model plus a Spring adapter. | not started | booking-silo listings (planned) |
+| `messaging` | Event/command messaging for silo services: transactional outbox + relay, RabbitMQ transport with publisher confirms, typed consumers, opt-in inbox dedup, trace context carried through the broker, constant-delay retry tiers (`@RabbitPolicy`). | `1.0.12` on GitHub Packages. | user-silo (publisher), notification-silo (consumer) |
+| `pagination` | Kotlin. Offset, slice and keyset pagination as one core model (stdlib only) plus a Spring adapter: query-param resolver, policy with a 400 mapping, flat response models, `Pageable` and keyset-scroll adapters. Keyset behaviour proven against Postgres 17. | `0.1.0` on GitHub Packages. | booking-silo listings (planned) |
 
 ## Working with the repo
 
@@ -16,7 +16,7 @@ Libraries share one repository until one of them needs its own ownership or cade
   then adds `mavenLocal()` and pins the `-SNAPSHOT`; both are temporary scaffolding that
   never ships on a consumer's main branch.
 - Release a library from a PR branch:
-  `./gradlew :messaging:release -PreleaseVersion=x.y.z`. The task validates, rewrites the
+  `./gradlew :<library>:release -PreleaseVersion=x.y.z` (for example `:messaging:release` or `:pagination:release`). The task validates, rewrites the
   version line, builds, commits and tags, publishes to GitHub Packages, commits the next
   `-SNAPSHOT` and pushes branch and tag atomically. Merge the PR **with a merge commit**;
   a rebase-merge rewrites SHAs and orphans the pushed tag. Publishing needs a `gpr.key`
@@ -28,4 +28,5 @@ Libraries share one repository until one of them needs its own ownership or cade
 ## Documents
 
 - `messaging/README.md`: the consumer guide (contract jars, schema, wiring, consumers).
+- `pagination/README.md`: the three kinds of page, keyset rules, the Spring wiring, what was proven on Postgres.
 - `CHECKPOINT.md`: the engineering journal and the arbiter of what is decided and built.
