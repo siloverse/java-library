@@ -1,6 +1,6 @@
 # PROJECT CHECKPOINT — siloverse messaging library
 
-_Last updated: 2026-10-20. This document is the arbiter: if Claude asserts something about the code that isn't here or in a paste, call it — that's drift._
+_Last updated: 2026-10-20 (night). This document is the arbiter: if Claude asserts something about the code that isn't here or in a paste, call it — that's drift._
 
 **Goal:** Learn EIP by building a messaging library. Modular monolith first, microservices later. Prior failure being avoided: a `message_delivery` table that reimplemented broker logic in PostgreSQL.
 
@@ -16,6 +16,10 @@ _Last updated: 2026-10-20. This document is the arbiter: if Claude asserts somet
 - **Released:** messaging `1.0.9` is the newest version on GitHub Packages (tag `messaging-v1.0.9`).
 - **Pending release: messaging `1.0.11`.** Everything after 1.0.9 (tracing contributor SPI, dispatcher interface + tracing decorator, dlq/retry/main topology, `@RabbitPolicy`, `MessageDispatcher` widening) exists only as `1.0.11-SNAPSHOT` in mavenLocal (`1.0.10-SNAPSHOT` was never released either). user-silo and notification-silo pin that snapshot, which is why their CI is red: the runners have no mavenLocal. Order: `./gradlew :messaging:release -PreleaseVersion=1.0.11` on a PR branch here, merge with a merge commit, then bump both silos to `1.0.11` and remove their `mavenLocal()` scaffolding.
 - **Next:** was the pagination library — DONE, released 0.1.0 on 2026-10-20 (section below). Then Selector.
+
+## ✅ RELEASED: pagination 0.2.0, selector 0.1.0, projector 0.1.0 (2026-10-20, branch `selector` → PR, Awais merges WITH A MERGE COMMIT)
+
+Three `:<library>:release` runs back to back on one PR branch, all clean: tags `pagination-v0.2.0`, `selector-v0.1.0`, `projector-v0.1.0` on origin, artifacts on GitHub Packages (core/spring/jdsl/bom each where present), branch at `0.2.1` / `0.1.1` / `0.1.1` snapshots. pagination jumped to 0.2.0 because the API changed (sort inside the requests, `SortSpec`, cursor signature). Consumer coordinates: `platform("io.github.siloverse:pagination-bom:0.2.0")`, `selector-bom:0.1.0`, `projector-bom:0.1.0`. 150 tests across the three libraries. The query chapter's first consumer is still booking-silo (listings), where the three meet in one controller: `@Selectors(entity) selectors: List<Selector>`, `request: KeysetRequest`, `projection: Projection`.
 
 ## Projector library built & green (0.1.0-SNAPSHOT, 2026-10-20; 14 tests)
 
