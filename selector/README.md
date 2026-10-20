@@ -1,10 +1,11 @@
 # siloverse selector
 
-Turns a list endpoint's query parameters into a typed, validated WHERE clause. Nothing else:
-sorting and paging belong to the pagination library.
+Turns a list endpoint's `filter.*` query parameters into a typed, validated WHERE clause.
+Nothing else: sorting and paging belong to the pagination library.
 
-**The rule, in one line:** a list declares which fields a client may filter and how; anything
-outside that declaration is a 400 naming the query key, never silently ignored.
+**The rule, in one line:** every filter an entity offers is one declared spec; a query key that
+matches none, a wrong value count, or a value the spec cannot read is a 400 naming the key,
+never something silently ignored.
 
 ## 1. Dependencies
 
@@ -12,7 +13,7 @@ outside that declaration is a 400 naming the query key, never silently ignored.
 dependencies {
     implementation(platform("io.github.siloverse:selector-bom:0.1.0"))
     implementation("io.github.siloverse:selector-core")
-    implementation("io.github.siloverse:selector-jdsl")     // the Kotlin JDSL engine adapter
+    implementation("io.github.siloverse:selector-jdsl")     // the Kotlin JDSL engine
     implementation("io.github.siloverse:selector-spring")   // only in a Spring MVC service
 }
 ```
@@ -21,104 +22,94 @@ dependencies {
 
 | module | depends on | contents |
 |---|---|---|
-| `selector-core` | nothing | `FilterDefinition`, `Field`, `FieldType`, `Operator`, `Selection`, `Condition`, `SelectorException` |
-| `selector-jdsl` | core, Kotlin JDSL | `JdslBindings`, `Jpql.where(selection, bindings)`, `JdslStrategy` |
-| `selector-spring` | core, Spring MVC | `SelectorConfiguration`, `@Filtered` + `SelectionArgumentResolver`, 400 mapping |
+| `selector-core` | nothing | `Selector`, `Selectors.parse`, `SelectorSpec`, `FieldType`, `SelectorRegistry`, `SelectorException` |
+| `selector-jdsl` | core, Kotlin JDSL | `JdslSpec`, `JdslSingleValueSpec`, `JdslMultiValueSpec`, `SelectorSpecManager` |
+| `selector-spring` | core, Spring MVC | `SelectorConfiguration`, `@Selectors` + `SelectorsArgumentResolver`, 400 mapping |
 
-## 3. Declare the list once
+## 3. The wire format
 
-```kotlin
-val id = Field("id", FieldType.UUID, Operator.EQ, Operator.IN)
-val status = Field("status", FieldType.STRING, Operator.EQ, Operator.NE, Operator.IN)
-val price = Field("price", FieldType.LONG, Operator.EQ, Operator.LT, Operator.LTE, Operator.GT, Operator.GTE)
-val title = Field("title", FieldType.STRING, Operator.LIKE)
-val search = Field("search", FieldType.STRING, Operator.EQ)        // no column: a strategy serves it
+`filter.<namespace>.<attribute>` or `filter.<namespace>.<attribute>.<constraint>`. A repeated key
+is one selector with several values. Keys without the `filter.` prefix are not filters.
 
-val listingFilters = FilterDefinition(id, status, price, title, search)
-```
-
-`like` may only be declared on a string field. A field with no operator is rejected.
-
-## 4. The wire format
-
-| query | meaning |
+| query | selector |
 |---|---|
-| `status=open` | equals |
-| `price.lt=50` | any operator by suffix: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `like` |
-| `id.in=a,b,c` | a comma-separated list |
-| `title.like=listing 1%` | the pattern is passed through; the client controls `%` |
+| `filter.order.status=open` | namespace `order`, attribute `status`, one value |
+| `filter.order.checked-out-at.after=2026-01-01T00:00:00Z` | constraint `after` |
+| `filter.order.id=1&filter.order.id=2` | two values |
 
-`page`, `size`, `after` and `sort` are not filters and are skipped (the set is replaceable).
+## 4. Declare one spec per filter
 
-`Selection.parse(definition, params)` returns the typed conditions or throws `SelectorException(parameter, message)`:
-unknown field (the message lists the fields), unknown or disallowed operator (lists what is allowed),
-a value that does not parse (`price.lt: 'cheap' is not a valid long`), an empty value, a key given twice.
-
-## 5. The Kotlin JDSL engine
-
-Bind each field once. The compiler checks a `Field<Long>` against a `Long` property. Every field
-must be bound, or the bindings refuse to build.
+A spec is a bean. It names its entity, its key, the type of its values and how many values it
+takes, and it writes the predicate. The compiler hands it typed values; the `Jpql` receiver gives
+it paths, subqueries and joins; repositories may be injected.
 
 ```kotlin
-val bindings = JdslBindings<Listing>(listingFilters) {
-    bind(id, Listing::id)
-    bind(status, Listing::status)
-    bind(price, Listing::price)
-    bind(title, Listing::title)
-    strategy(search) { condition -> path(Listing::title).like("%${condition.value}%") }
+@Component
+class OrderStatusSpec : JdslSingleValueSpec<String>(Order::class, "order", "status", type = FieldType.STRING) {
+    override fun Jpql.predicate(value: String): Predicatable = path(Order::status).equal(value)
 }
 
-fun listings(selection: Selection): List<Listing> =
-    repository.findAll {
-        select(entity(Listing::class))
-            .from(entity(Listing::class))
-            .where(where(selection, bindings))          // null when the selection is empty
-            .orderBy(path(Listing::createdAt).asc(), path(Listing::id).asc())
-    }.filterNotNull()
+@Component
+class OrderIdSpec : JdslMultiValueSpec<Long>(Order::class, "order", "id", type = FieldType.LONG) {
+    override fun Jpql.predicate(values: List<Long>): Predicatable = path(Order::id).`in`(values)
+}
+
+@Component
+class OrderAnyItemInStatusSpec : JdslMultiValueSpec<ItemStatus>(
+    Order::class, "order", "any-item-status", type = FieldType("item status") { ItemStatus.valueOf(it) },
+) {
+    override fun Jpql.predicate(values: List<ItemStatus>): Predicatable = exists(
+        select(intLiteral(1)).from(entity(OrderItem::class))
+            .where(and(path(OrderItem::order).equal(entity(Order::class)), path(OrderItem::status).`in`(values)))
+            .asSubquery(),
+    )
+}
 ```
 
-Values travel as query parameters, never as text in the JPQL.
+`FieldType` has `STRING`, `INT`, `LONG`, `BOOLEAN`, `UUID`, `INSTANT`, `OFFSET_DATE_TIME`; make your own
+with a name and a parser. The spec's `parse` is the only place client text becomes values.
 
-A `JdslStrategy` is the escape hatch for what a path comparison cannot say: a subquery, a join,
-a computed column. It receives the typed `Condition` and returns any JDSL predicate.
-
-### Keyset paging through JDSL
-
-JDSL has no scrolling, but HQL 7 accepts a tuple comparison and Hibernate 7.4 renders it as a SQL
-row value (`HqlTupleComparisonTest`):
+## 5. The service
 
 ```kotlin
-customPredicate("({0}, {1}) > ({2}, {3})", path(Listing::createdAt), path(Listing::id), value(ts), value(id))
+@Bean fun selectorSpecManager(specs: List<JdslSpec<*>>) = SelectorSpecManager(specs)   // once, in the app
+
+fun orders(selectors: List<Selector>, request: KeysetRequest): KeysetPage<Order> =
+    repository.findAll(limit = request.size + 1) {
+        select(entity(Order::class)).from(entity(Order::class))
+            .where(and(selectorSpecManager.apply(selectors), keysetAfter(request, orderSort)))
+            .orderBy(*keysetOrder(request, orderSort).toTypedArray())
+    }.toKeysetPage(request, orderSort)
 ```
 
-becomes `(l1_0.created_at,l1_0.id)>(?,?)`, which Postgres answers with an `Index Cond` seek on the
-composite index. That is the fast keyset form, which Spring Data's keyset scrolling (OR chain, index walk
-with a Filter) does not produce. The pagination library's JDSL adapter builds on this.
+`apply` ANDs the predicates and returns null for no selectors. Values are bound parameters, never
+text in the JPQL. Two specs for one key on one entity stop the application at startup.
 
-## 6. In a Spring MVC service
-
-Import the configuration, declare one `FilterDefinition` bean per list, and name it on the
-controller parameter. The resolver hands the controller a parsed `Selection`; a bad filter is a
-400 problem detail naming the query key.
+## 6. The controller
 
 ```kotlin
 @Configuration
 @Import(SelectorConfiguration::class)
-class WebConfiguration {
-    @Bean fun listingFilters() = FilterDefinition(id, status, price, title, search)
-}
+class WebConfiguration
 
-@GetMapping("/listings")
-fun listings(@Filtered("listingFilters") selection: Selection, request: KeysetRequest): KeysetPageResponse<ListingDto> = ...
+@GetMapping("/orders")
+fun orders(@Selectors(entity = Order::class) selectors: List<Selector>, request: KeysetRequest): KeysetPageResponse<OrderDto>
 ```
+
+The resolver hands the controller every `filter.*` key as a selector and refuses an unknown one
+at the door. The pagination resolver reads the same `entity` to validate `sort=`, so the entity
+is named once.
 
 ```json
 { "type": "about:blank", "title": "Invalid filter", "status": 400,
-  "detail": "prodcut: unknown filter field 'prodcut'; fields: [id, status, price, title, search]", "parameter": "prodcut" }
+  "detail": "filter.order.prize: unknown filter; filters for Order: [filter.order.id, filter.order.status]",
+  "parameter": "filter.order.prize" }
 ```
 
 ## 7. Tests
 
 `selector-core` tests are plain unit tests; `selector-spring` runs a real Spring MVC context with
 MockMvc. `selector-jdsl` runs against a real Postgres 17 in Testcontainers with the JDSL executor
-wired by hand (no Boot), so building it needs Docker.
+wired by hand (no Boot), so building it needs Docker. `HqlTupleComparisonTest` there proves that a
+JDSL `customPredicate` tuple comparison renders as a SQL row value that Postgres seeks on, which the
+pagination library's JDSL keyset builds on.

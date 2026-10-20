@@ -1,4 +1,4 @@
-package io.github.siloverse.selector.core.definition
+package io.github.siloverse.selector.core.spec
 
 import java.time.Instant
 import java.time.OffsetDateTime
