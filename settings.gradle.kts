@@ -53,9 +53,11 @@ include(
     "pagination:pagination-core",
     "pagination:pagination-spring",
     "pagination:pagination-jdsl",
+    "selector:selector-bom",
     "selector:selector-core",
     "selector:selector-jdsl",
     "selector:selector-spring",
+    "projector:projector-bom",
     "projector:projector-core",
     "projector:projector-spring",
 )
