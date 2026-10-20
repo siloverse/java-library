@@ -52,4 +52,5 @@ include(
     "pagination:pagination-bom",
     "pagination:pagination-core",
     "pagination:pagination-spring",
+    "selector:selector-core",
 )
