@@ -11,7 +11,7 @@ it rejects bad input, it never clamps it.
 | module | depends on | contents |
 |---|---|---|
 | `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `PaginationPolicy`, `PaginationException` |
-| `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, 400 mapping |
+| `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, `KeysetKeys` + scroll adapters, 400 mapping |
 | `pagination-bom` | — | version alignment for consumers |
 
 ## The three kinds of page
@@ -42,6 +42,11 @@ Two facts proved against Postgres 17 (see `KeysetSqlProvingGroundTest`):
   the start and filters, so deep pages get slow again.
 - Build the cursor from the values the database returned, not the ones the application created.
   Postgres rounds timestamps to microseconds; a nanosecond `Instant` points at a row that is not there.
+  The scroll adapter does this for you: Spring Data hands back the last row's values as loaded.
+
+Spring Data's keyset scrolling writes the OR-chain form (`KeysetJpaProvingGroundTest`). It is correct,
+and it composes with a `Specification`; it is just not depth-proof on Postgres. Reach for a native
+row-value query only when a real list is deep enough for `EXPLAIN` to show the walk hurting.
 
 ## Building a result from a query
 
@@ -76,14 +81,23 @@ fun listings(request: OffsetRequest): OffsetPageResponse<ListingDto> =
         .toOffsetPage(request)
         .toResponse()
 
+// written once, next to the list: the sort IS the keyset, and the last key must be unique
+private val keys = KeysetKeys(KeysetKey.offsetDateTime("createdAt"), KeysetKey.uuid("id"))
+
 @GetMapping("/feed")
-fun feed(request: KeysetRequest): KeysetPageResponse<ListingDto> {
-    val rows = repository.findAfter(request.after?.parts(), limit = request.size + 1)
-    return KeysetPage.fromOverFetch(rows, request) { Cursor.of(it.createdAt.toString(), it.id.toString()) }
-        .map(ListingDto::from)   // your mapping
+fun feed(request: KeysetRequest): KeysetPageResponse<ListingDto> =
+    repository
+        .findBy(filter) { q -> q.sortBy(keys.sort()).limit(request.size).scroll(request.toScrollPosition(keys)) }
+        .toKeysetPage(request, keys)
+        .let { page -> KeysetPage(page.items.map(ListingDto::from), page.request, page.nextCursor) }
         .toResponse()
-}
 ```
+
+`filter` is any `Specification` (the Selector library will produce it); Spring Data ANDs the cursor
+predicate onto it and writes one query. The cursor says where you are; the filter says which list
+you are in; the client must send the same filter with the cursor.
+
+Without Spring Data, build the page from your own query with `KeysetPage.fromOverFetch(rows, request) { row -> Cursor.of(...) }`.
 
 Bad input is a 400 problem detail that names the parameter:
 

@@ -7,18 +7,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.ScrollPosition
 import org.springframework.data.domain.Sort
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.orm.jpa.JpaTransactionManager
-import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean
-import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter
-import org.springframework.transaction.PlatformTransactionManager
-import org.testcontainers.postgresql.PostgreSQLContainer
 import java.util.UUID
 import javax.sql.DataSource
 
@@ -30,40 +22,13 @@ import javax.sql.DataSource
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class KeysetJpaProvingGroundTest {
 
-    @Configuration(proxyBeanMethods = false)
-    @EnableJpaRepositories(basePackageClasses = [ListingRepository::class])
-    open class JpaApp {
-        @Bean open fun dataSource(): DataSource = ListingFixture.dataSource(postgres)
-
-        @Bean open fun entityManagerFactory(dataSource: DataSource) =
-            LocalContainerEntityManagerFactoryBean().apply {
-                this.dataSource = dataSource
-                setPackagesToScan(Listing::class.java.packageName)
-                jpaVendorAdapter = HibernateJpaVendorAdapter()
-                setJpaPropertyMap(
-                    mapOf(
-                        "hibernate.hbm2ddl.auto" to "none",
-                        "hibernate.session_factory.statement_inspector" to RecordingStatementInspector::class.java.name,
-                    ),
-                )
-            }
-
-        @Bean open fun transactionManager(emf: jakarta.persistence.EntityManagerFactory): PlatformTransactionManager =
-            JpaTransactionManager(emf)
-    }
-
-    companion object {
-        lateinit var postgres: PostgreSQLContainer
-    }
-
     private lateinit var context: AnnotationConfigApplicationContext
     private lateinit var repository: ListingRepository
     private lateinit var jdbc: JdbcTemplate
 
     @BeforeAll
     fun start() {
-        postgres = ListingFixture.start()
-        context = AnnotationConfigApplicationContext(JpaApp::class.java)
+        context = ListingJpaApp.start(ListingFixture.start())
         repository = context.getBean(ListingRepository::class.java)
         jdbc = JdbcTemplate(context.getBean(DataSource::class.java))
     }

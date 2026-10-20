@@ -6,9 +6,10 @@ import org.springframework.data.domain.ScrollPosition
 import org.springframework.data.domain.Window
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import java.util.UUID
 
-interface ListingRepository : JpaRepository<Listing, UUID> {
+interface ListingRepository : JpaRepository<Listing, UUID>, JpaSpecificationExecutor<Listing> {
 
     /** Spring Data keyset scrolling: the position carries the sort key values of the last row seen. */
     fun findFirst25ByOrderByCreatedAtAscIdAsc(position: ScrollPosition): Window<Listing>
