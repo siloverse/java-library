@@ -17,6 +17,7 @@ class Field<T : Any>(
         require(name.isNotBlank()) { "field name must not be blank" }
         require(name.none { it == '.' || it == ',' || it.isWhitespace() }) { "field name '$name' may not contain '.', ',' or spaces" }
         require(operators.isNotEmpty()) { "field '$name' allows no operator" }
+        require(Operator.LIKE !in operators || type == FieldType.STRING) { "field '$name': 'like' only makes sense on a string field" }
     }
 
     override fun toString(): String = name
