@@ -23,8 +23,9 @@ repository block and credentials are the same as for messaging.
 
 | module | depends on | contents |
 |---|---|---|
-| `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `PaginationPolicy`, `PaginationException` |
-| `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, `KeysetKeys` + scroll adapters, 400 mapping |
+| `pagination-core` | nothing | `OffsetRequest` / `OffsetPage`, `Slice`, `KeysetRequest` / `KeysetPage`, `Cursor`, `KeysetKey` / `KeysetKeys`, `SortableFields` / `SortRequest`, `PaginationPolicy`, `PaginationException` |
+| `pagination-spring` | core, Spring MVC, Spring Data Commons | `PaginationConfiguration`, `PaginationArgumentResolver`, flat response models, `Pageable` adapters, `toSort` + scroll adapters, 400 mapping |
+| `pagination-jdsl` | core, Kotlin JDSL | `JdslKeyset` bindings, `keysetAfter` (row-value seek), `keysetOrder`, rows to `KeysetPage` |
 | `pagination-bom` | — | version alignment for consumers |
 
 ## 3. The three kinds of page
@@ -94,16 +95,21 @@ fun listings(request: OffsetRequest): OffsetPageResponse<ListingDto> =
         .map(ListingDto::from)
         .toResponse()
 
-// written once, next to the list: the sort IS the keyset, and the last key must be unique
-private val keys = KeysetKeys(KeysetKey.offsetDateTime("createdAt"), KeysetKey.uuid("id"))
+// written once, next to the list: which fields sort, how each travels through the cursor, the tie breaker
+private val sortable = SortableFields(
+    KeysetKey.offsetDateTime("createdAt"), KeysetKey.long("price"), KeysetKey.uuid("id"),
+    tieBreaker = "id",
+)
 
 @GetMapping("/feed")
-fun feed(request: KeysetRequest): KeysetPageResponse<ListingDto> =
-    repository
-        .findBy(filter) { q -> q.sortBy(keys.sort()).limit(request.size).scroll(request.toScrollPosition(keys)) }
+fun feed(request: KeysetRequest, @RequestParam sort: List<String>?): KeysetPageResponse<ListingDto> {
+    val keys = sortable.keysFor(SortRequest.parse(sortable, sort))   // client's sort, tie breaker appended, 400 on a bad field
+    return repository
+        .findBy(filter) { q -> q.sortBy(keys.toSort()).limit(request.size).scroll(request.toScrollPosition(keys)) }
         .toKeysetPage(request, keys)
         .map(ListingDto::from)
         .toResponse()
+}
 ```
 
 `filter` is any `Specification` (the Selector library will produce it); Spring Data ANDs the cursor
