@@ -12,7 +12,8 @@ outside that declaration is a 400 naming the query key, never silently ignored.
 dependencies {
     implementation(platform("io.github.siloverse:selector-bom:0.1.0"))
     implementation("io.github.siloverse:selector-core")
-    implementation("io.github.siloverse:selector-jdsl")   // the Kotlin JDSL engine adapter
+    implementation("io.github.siloverse:selector-jdsl")     // the Kotlin JDSL engine adapter
+    implementation("io.github.siloverse:selector-spring")   // only in a Spring MVC service
 }
 ```
 
@@ -22,6 +23,7 @@ dependencies {
 |---|---|---|
 | `selector-core` | nothing | `FilterDefinition`, `Field`, `FieldType`, `Operator`, `Selection`, `Condition`, `SelectorException` |
 | `selector-jdsl` | core, Kotlin JDSL | `JdslBindings`, `Jpql.where(selection, bindings)`, `JdslStrategy` |
+| `selector-spring` | core, Spring MVC | `SelectorConfiguration`, `@Filtered` + `SelectionArgumentResolver`, 400 mapping |
 
 ## 3. Declare the list once
 
@@ -93,7 +95,30 @@ becomes `(l1_0.created_at,l1_0.id)>(?,?)`, which Postgres answers with an `Index
 composite index. That is the fast keyset form, which Spring Data's keyset scrolling (OR chain, index walk
 with a Filter) does not produce. The pagination library's JDSL adapter builds on this.
 
-## 6. Tests
+## 6. In a Spring MVC service
 
-`selector-core` tests are plain unit tests. `selector-jdsl` runs against a real Postgres 17 in
-Testcontainers with the JDSL executor wired by hand (no Boot), so building it needs Docker.
+Import the configuration, declare one `FilterDefinition` bean per list, and name it on the
+controller parameter. The resolver hands the controller a parsed `Selection`; a bad filter is a
+400 problem detail naming the query key.
+
+```kotlin
+@Configuration
+@Import(SelectorConfiguration::class)
+class WebConfiguration {
+    @Bean fun listingFilters() = FilterDefinition(id, status, price, title, search)
+}
+
+@GetMapping("/listings")
+fun listings(@Filtered("listingFilters") selection: Selection, request: KeysetRequest): KeysetPageResponse<ListingDto> = ...
+```
+
+```json
+{ "type": "about:blank", "title": "Invalid filter", "status": 400,
+  "detail": "prodcut: unknown filter field 'prodcut'; fields: [id, status, price, title, search]", "parameter": "prodcut" }
+```
+
+## 7. Tests
+
+`selector-core` tests are plain unit tests; `selector-spring` runs a real Spring MVC context with
+MockMvc. `selector-jdsl` runs against a real Postgres 17 in Testcontainers with the JDSL executor
+wired by hand (no Boot), so building it needs Docker.
