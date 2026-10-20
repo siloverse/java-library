@@ -1,3 +1,7 @@
+[versions]
+# Not managed by the Boot BOM. 3.9.0 is the first line with Spring Boot 4 support.
+kotlin-jdsl = "3.9.0"
+
 [libraries]
 # Version managed by spring-boot-dependencies via the shared platform. Deliberately NOT in the
 # shared catalog: services must reach the broker through the buses, never the client directly.
@@ -23,3 +27,7 @@ json-path = { module = "com.jayway.jsonpath:json-path" }
 spring-data-jpa = { module = "org.springframework.data:spring-data-jpa" }
 spring-orm = { module = "org.springframework:spring-orm" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core" }
+kotlin-jdsl-dsl = { module = "com.linecorp.kotlin-jdsl:jpql-dsl", version.ref = "kotlin-jdsl" }
+kotlin-jdsl-query-model = { module = "com.linecorp.kotlin-jdsl:jpql-query-model", version.ref = "kotlin-jdsl" }
+kotlin-jdsl-render = { module = "com.linecorp.kotlin-jdsl:jpql-render", version.ref = "kotlin-jdsl" }
+kotlin-jdsl-spring-data-jpa = { module = "com.linecorp.kotlin-jdsl:spring-data-jpa-boot4-support", version.ref = "kotlin-jdsl" }
