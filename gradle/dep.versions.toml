@@ -1,4 +1,10 @@
 [versions]
+# springdoc 3.x is the line for Spring Boot 4.
+springdoc = "3.1.1"
+# The released query-chapter libraries, consumed by openapi-springdoc as a real consumer (own release cadence).
+siloverse-pagination = "0.2.0"
+siloverse-selector = "0.1.0"
+siloverse-projector = "0.1.0"
 # Not managed by the Boot BOM. 3.9.0 is the first line with Spring Boot 4 support.
 kotlin-jdsl = "3.9.0"
 
@@ -27,6 +33,15 @@ json-path = { module = "com.jayway.jsonpath:json-path" }
 spring-data-jpa = { module = "org.springframework.data:spring-data-jpa" }
 spring-orm = { module = "org.springframework:spring-orm" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core" }
+springdoc-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmvc-api", version.ref = "springdoc" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+siloverse-pagination-core = { module = "io.github.siloverse:pagination-core", version.ref = "siloverse-pagination" }
+siloverse-pagination-spring = { module = "io.github.siloverse:pagination-spring", version.ref = "siloverse-pagination" }
+siloverse-selector-core = { module = "io.github.siloverse:selector-core", version.ref = "siloverse-selector" }
+siloverse-selector-spring = { module = "io.github.siloverse:selector-spring", version.ref = "siloverse-selector" }
+siloverse-projector-core = { module = "io.github.siloverse:projector-core", version.ref = "siloverse-projector" }
+siloverse-projector-spring = { module = "io.github.siloverse:projector-spring", version.ref = "siloverse-projector" }
+spring-boot-webmvc-test = { module = "org.springframework.boot:spring-boot-webmvc-test" }
 kotlin-jdsl-dsl = { module = "com.linecorp.kotlin-jdsl:jpql-dsl", version.ref = "kotlin-jdsl" }
 kotlin-jdsl-query-model = { module = "com.linecorp.kotlin-jdsl:jpql-query-model", version.ref = "kotlin-jdsl" }
 kotlin-jdsl-render = { module = "com.linecorp.kotlin-jdsl:jpql-render", version.ref = "kotlin-jdsl" }

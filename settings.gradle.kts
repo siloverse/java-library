@@ -52,6 +52,7 @@ include(
     "pagination:pagination-bom",
     "pagination:pagination-core",
     "pagination:pagination-spring",
+    "openapi:openapi-springdoc",
     "pagination:pagination-jdsl",
     "selector:selector-bom",
     "selector:selector-core",
