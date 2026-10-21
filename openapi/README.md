@@ -10,10 +10,11 @@ consumer may send is in it, named and typed, and nothing a resolver reads is lef
 
 ```kotlin
 dependencies {
-    implementation(platform("io.github.siloverse:openapi-bom:0.1.0"))
-    implementation("io.github.siloverse:openapi-springdoc")
+    implementation("io.github.siloverse:openapi-springdoc:0.1.0")
 }
 ```
+
+One module, so no BOM yet; one appears when a second module earns its existence.
 
 `openapi-springdoc` depends on the released pagination, selector and projector libraries and on
 `springdoc-openapi-starter-webmvc-api`. It is a consumer of those libraries, with its own release cadence.
