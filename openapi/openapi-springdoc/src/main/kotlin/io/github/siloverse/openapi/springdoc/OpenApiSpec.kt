@@ -22,8 +22,16 @@ object OpenApiSpec {
     const val SPEC_PROPERTY = "siloverse.openapi.spec"
     const val UPDATE_PROPERTY = "siloverse.openapi.update"
 
-    fun yaml(mockMvc: MockMvc): String =
-        mockMvc.perform(get(PATH)).andReturn().response.contentAsString
+    /** Fails loudly when the endpoint is not reachable, instead of writing an empty contract. */
+    fun yaml(mockMvc: MockMvc): String {
+        val response = mockMvc.perform(get(PATH)).andReturn().response
+        check(response.status == 200 && response.contentAsString.isNotBlank()) {
+            "GET $PATH answered ${response.status} with ${response.contentAsString.length} bytes. " +
+                "Permit `/v3/api-docs`, `/v3/api-docs.yaml` and `/v3/api-docs/**` in the security configuration " +
+                "(the contract is public: generated clients are built from it)."
+        }
+        return response.contentAsString
+    }
 
     /** Writes the spec. Returns true when the file changed. */
     fun write(mockMvc: MockMvc, target: Path): Boolean {
