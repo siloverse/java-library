@@ -72,11 +72,45 @@ class OpenApiSpecTest(@Autowired private val mockMvc: MockMvc) {
     }
 
     @Test
+    fun `the spec of the test app is kept as a build artifact, for the generator to try`() {
+        val target = java.nio.file.Path.of("build", "openapi", "openapi-spec.yaml")
+
+        OpenApiSpec.write(mockMvc, target)
+
+        assertThat(Files.readString(target)).contains("/listings:")
+    }
+
+    @Test
     fun `the spec can be written as the committed contract, and reports drift`() {
         val target = Files.createTempDirectory("spec").resolve("openapi-spec.yaml")
 
         assertThat(OpenApiSpec.write(mockMvc, target)).isTrue()
         assertThat(Files.readString(target)).contains("openapi: 3.", "/listings:", "filter.listing.status")
         assertThat(OpenApiSpec.write(mockMvc, target)).isFalse()
+    }
+
+    @Test
+    fun `verify writes a missing contract, passes on a matching one, and names the fix on drift`() {
+        val target = Files.createTempDirectory("spec").resolve("openapi-spec.yaml")
+        System.setProperty(OpenApiSpec.SPEC_PROPERTY, target.toString())
+        System.clearProperty(OpenApiSpec.UPDATE_PROPERTY)
+        try {
+            OpenApiSpec.verify(mockMvc)                       // missing: written
+            assertThat(Files.exists(target)).isTrue()
+            OpenApiSpec.verify(mockMvc)                       // matching: passes
+
+            Files.writeString(target, Files.readString(target) + "\n# edited by hand\n")
+            org.assertj.core.api.Assertions.assertThatThrownBy { OpenApiSpec.verify(mockMvc) }
+                .isInstanceOf(AssertionError::class.java)
+                .hasMessageContaining("drifted")
+                .hasMessageContaining("-PupdateOpenApiSpec")
+
+            System.setProperty(OpenApiSpec.UPDATE_PROPERTY, "true")
+            OpenApiSpec.verify(mockMvc)                       // update: rewritten
+            assertThat(Files.readString(target)).doesNotContain("edited by hand")
+        } finally {
+            System.clearProperty(OpenApiSpec.SPEC_PROPERTY)
+            System.clearProperty(OpenApiSpec.UPDATE_PROPERTY)
+        }
     }
 }
