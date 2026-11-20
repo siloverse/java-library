@@ -10,7 +10,7 @@ Libraries share one repository until one of them needs its own ownership or cade
 | `pagination` | Kotlin. Offset, slice and keyset pagination as one core model (stdlib only); the client's sort inside the request, validated against a `SortSpec` per entity; Spring resolver with 400 mapping and flat responses; Spring Data scroll adapters; Kotlin JDSL adapter with a row-value keyset seek. Proven against Postgres 17. | `0.2.0` on GitHub Packages. | booking-silo listings (planned) |
 | `selector` | Kotlin. `filter.*` query parameters to a WHERE clause: one spec per filter (entity, key, value type, arity), registry, Kotlin JDSL specs and manager, `@Selectors` resolver. Unknown or malformed filters are 400s. | `0.1.0` on GitHub Packages. | booking-silo listings (planned) |
 | `projector` | Kotlin. Optional DTO parts (`include=items`) computed by batched projectors, one call per page; registry checks fields against projectors; `Projection` resolver and 400 mapping. | `0.1.0` on GitHub Packages. | booking-silo listings (planned) |
-| `identifiers` | Kotlin, stdlib only. Identifiers a service makes itself: `UuidV7`, a time-ordered UUID (48 bits of milliseconds, 74 random bits from `SecureRandom`) that keeps new rows at the end of an index and cannot be guessed. | not yet released | brokerage (ledger) |
+| `identifiers` | Kotlin, stdlib only. Identifiers a service makes itself: `UuidV7`, a time-ordered UUID (48 bits of milliseconds, 74 random bits from `SecureRandom`) that keeps new rows at the end of an index and cannot be guessed. | `0.1.0` on GitHub Packages. | brokerage (ledger) |
 
 ## Working with the repo
 
