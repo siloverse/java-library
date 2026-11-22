@@ -17,10 +17,10 @@ pluginManagement {
 
 plugins {
     id("io.github.siloverse.parent") version "1.11.2" apply false
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         maven {
             url = uri("https://maven.pkg.github.com/siloverse/siloverse-build")
@@ -30,7 +30,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        mavenLocal()
     }
     versionCatalogs {
         create("libs") {
@@ -61,4 +60,6 @@ include(
     "projector:projector-bom",
     "projector:projector-core",
     "projector:projector-spring",
+    "identifiers:identifiers-bom",
+    "identifiers:identifiers-core",
 )
